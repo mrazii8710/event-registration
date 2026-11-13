@@ -29,7 +29,9 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
   const [tab, setTab] = useState('setup')
   const fileInputRef = useRef(null)
 
-  const loadDashboard = useCallback(async () => {
+  // Full load: populates the editable form fields too. Only called on first
+  // mount and right after a save, so it never clobbers an in-progress edit.
+  const loadDashboardFull = useCallback(async () => {
     const { data, error } = await supabase.rpc('admin_get_dashboard', { p_admin_code: adminCode })
     if (error) {
       setStatus('Session expired or invalid code — please log in again.')
@@ -41,11 +43,21 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
     setQuestions((data.questions || []).map((q) => ({ ...q, options: q.options || [] })))
   }, [adminCode])
 
+  // Light poll: only refreshes live stats (active desks, total count) shown
+  // in the Desks & Data tab. Deliberately does NOT touch eventName,
+  // bannerUrl, or questions, so it never overwrites unsaved edits while
+  // you're typing in the Event Setup / Questions tabs.
+  const refreshLiveStats = useCallback(async () => {
+    const { data, error } = await supabase.rpc('admin_get_dashboard', { p_admin_code: adminCode })
+    if (error) return
+    setDashboard(data)
+  }, [adminCode])
+
   useEffect(() => {
-    loadDashboard()
-    const interval = setInterval(loadDashboard, 15000) // keep desk list / counts fresh
+    loadDashboardFull()
+    const interval = setInterval(refreshLiveStats, 15000) // keep desk list / counts fresh only
     return () => clearInterval(interval)
-  }, [loadDashboard])
+  }, [loadDashboardFull, refreshLiveStats])
 
   function flash(msg) {
     setStatus(msg)
@@ -60,7 +72,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
     })
     if (error) return flash('Failed to save event info.')
     flash('Event info saved.')
-    loadDashboard()
+    loadDashboardFull()
   }
 
   async function handleBannerChange(e) {
@@ -146,7 +158,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
     })
     if (error) return flash('Failed to save questions.')
     flash('Questions saved.')
-    loadDashboard()
+    loadDashboardFull()
   }
 
   async function handleForceRelease(deskNumber) {
@@ -156,7 +168,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
     })
     if (error) return flash('Failed to release desk.')
     flash(`Desk ${deskNumber} released.`)
-    loadDashboard()
+    loadDashboardFull()
   }
 
   async function handleExport() {
@@ -178,7 +190,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
     }
     setBannerUrl(null)
     flash('Event reset. Ready for the next one.')
-    loadDashboard()
+    loadDashboardFull()
   }
 
   if (!dashboard) {
