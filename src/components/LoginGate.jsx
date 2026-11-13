@@ -43,10 +43,6 @@ export default function LoginGate({ onDeskLogin, onAdminLogin, theme, toggleThem
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper dark:bg-ink-950 transition-colors px-4 relative overflow-hidden">
-      {/* soft ambient glow, single deliberate touch */}
-      <div className="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full bg-marigold-500/20 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-lagoon-500/20 blur-3xl" />
-
       <button
         onClick={toggleTheme}
         aria-label="Toggle dark mode"
@@ -57,12 +53,12 @@ export default function LoginGate({ onDeskLogin, onAdminLogin, theme, toggleThem
 
       <form
         onSubmit={handleSubmit}
-        className={`relative w-full max-w-sm bg-white dark:bg-ink-800 rounded-3xl shadow-xl shadow-ink-900/10 dark:shadow-black/30 p-8 flex flex-col gap-5 animate-ticket-in ${
+        className={`relative w-full max-w-sm bg-white dark:bg-ink-800 rounded-2xl border border-ink-100 dark:border-ink-700 shadow-sm p-8 flex flex-col gap-5 animate-fade-in ${
           shake ? 'animate-shake' : ''
         }`}
       >
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-ink-900 dark:bg-marigold-500 flex items-center justify-center shrink-0 -rotate-3">
+          <div className="w-11 h-11 rounded-xl bg-ink-900 dark:bg-marigold-500 flex items-center justify-center shrink-0">
             <Ticket className="text-marigold-400 dark:text-ink-900" size={20} />
           </div>
           <div>

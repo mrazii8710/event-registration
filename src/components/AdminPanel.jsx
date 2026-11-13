@@ -323,7 +323,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
     <div className="min-h-screen bg-paper dark:bg-ink-950 transition-colors flex">
       <aside className="w-56 shrink-0 bg-ink-900 dark:bg-ink-950 border-r border-ink-800 flex flex-col">
         <div className="flex items-center gap-2.5 px-5 py-5">
-          <div className="w-9 h-9 rounded-xl bg-marigold-500 flex items-center justify-center -rotate-3">
+          <div className="w-9 h-9 rounded-lg bg-marigold-500 flex items-center justify-center">
             <Ticket className="text-ink-900" size={18} />
           </div>
           <span className="font-display font-semibold text-white">Admin</span>
@@ -363,7 +363,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
 
       <div className="flex-1 flex flex-col min-w-0">
         {status && (
-          <div className="bg-lagoon-500/10 text-lagoon-600 dark:text-lagoon-400 text-sm text-center py-2 animate-rise-in">
+          <div className="bg-marigold-500/10 text-marigold-600 dark:text-marigold-400 text-sm text-center py-2 animate-fade-in">
             {status}
           </div>
         )}

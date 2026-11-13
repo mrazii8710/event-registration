@@ -310,7 +310,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-3">
             <h1 className="font-display font-semibold text-lg text-ink-900 dark:text-white">{config.event_name}</h1>
-            <span className="ticket-notch px-3 py-1.5 bg-marigold-500 text-ink-900 text-xs font-display font-bold tracking-wide -rotate-1">
+            <span className="rounded-md px-3 py-1.5 bg-marigold-500 text-white text-xs font-display font-semibold tracking-wide">
               DESK {deskNumber}
               {operatorName && (
                 <span className="font-body font-medium ml-1.5 opacity-70">{`· ${operatorName}`}</span>
@@ -354,7 +354,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
       <main className="flex-1 flex items-start justify-center pt-8 px-4 pb-10">
         <form onSubmit={handleSubmit} className="w-full max-w-lg flex flex-col gap-4">
           {dupWarning && (
-            <div className="px-4 py-3 rounded-xl bg-flare-500/10 text-flare-600 dark:text-flare-400 text-sm font-medium animate-rise-in">
+            <div className="px-4 py-3 rounded-lg bg-flare-500/10 text-flare-600 dark:text-flare-400 text-sm font-medium animate-fade-in">
               Duplicate detected: {dupWarning.label} already registered at Desk {dupWarning.deskNumber}
             </div>
           )}
@@ -480,8 +480,8 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
 
       {toast && (
         <div
-          className={`fixed top-5 left-1/2 -translate-x-1/2 px-5 py-3 rounded-2xl shadow-xl font-display font-semibold text-white animate-stamp-in -rotate-2 ${
-            toast.kind === 'error' ? 'bg-flare-500' : 'bg-lagoon-500'
+          className={`fixed top-5 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg shadow-md font-display font-semibold text-white animate-fade-in ${
+            toast.kind === 'error' ? 'bg-flare-500' : 'bg-marigold-500'
           }`}
         >
           {toast.message}

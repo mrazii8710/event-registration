@@ -14,17 +14,6 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
-.font-display {
-  font-family: 'Space Grotesk', sans-serif;
-}
-
-/* Notched "ticket stub" shape for the desk badge */
-.ticket-notch {
-  clip-path: polygon(
-    0% 8px, 4px 8px, 4px 0%, 100% 0%, 100% 100%, 4px 100%, 4px calc(100% - 8px), 0% calc(100% - 8px)
-  );
-}
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
