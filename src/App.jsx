@@ -5,7 +5,7 @@ import LoginGate from './components/LoginGate'
 import RegistrationDesk from './components/RegistrationDesk'
 import AdminPanel from './components/AdminPanel'
 
-const SESSION_KEY = 'event-app-desk-session' // { deskNumber, sessionToken }
+const SESSION_KEY = 'event-app-desk-session' // { deskNumber, sessionToken, operatorName }
 const ADMIN_KEY = 'event-app-admin-code'
 
 export default function App() {
@@ -14,7 +14,6 @@ export default function App() {
   const [deskSession, setDeskSession] = useState(null)
   const [adminCode, setAdminCode] = useState(null)
 
-  // On load, try to resume an existing desk session (survives page refresh)
   useEffect(() => {
     const storedAdmin = sessionStorage.getItem(ADMIN_KEY)
     if (storedAdmin) {
@@ -35,15 +34,16 @@ export default function App() {
         sessionStorage.removeItem(SESSION_KEY)
         setView('login')
       } else {
-        setDeskSession({ deskNumber: data.desk_number, sessionToken: parsed.sessionToken })
+        const operatorName = data.operator_name || parsed.operatorName
+        setDeskSession({ deskNumber: data.desk_number, sessionToken: parsed.sessionToken, operatorName })
         setView('desk')
       }
     })
   }, [])
 
-  function handleDeskLogin({ deskNumber, sessionToken }) {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ deskNumber, sessionToken }))
-    setDeskSession({ deskNumber, sessionToken })
+  function handleDeskLogin({ deskNumber, sessionToken, operatorName }) {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ deskNumber, sessionToken, operatorName }))
+    setDeskSession({ deskNumber, sessionToken, operatorName })
     setView('desk')
   }
 
@@ -67,8 +67,8 @@ export default function App() {
 
   if (view === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400">
-        Loading...
+      <div className="min-h-screen flex items-center justify-center bg-paper dark:bg-ink-950 text-ink-500 dark:text-ink-400 font-display">
+        {'Loading…'}
       </div>
     )
   }
@@ -78,6 +78,7 @@ export default function App() {
       <RegistrationDesk
         deskNumber={deskSession.deskNumber}
         sessionToken={deskSession.sessionToken}
+        operatorName={deskSession.operatorName}
         onLogout={handleDeskLogout}
         theme={theme}
         toggleTheme={toggleTheme}

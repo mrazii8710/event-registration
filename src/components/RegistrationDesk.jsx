@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { LogOut, Moon, Sun, WifiOff } from 'lucide-react'
+import { LogOut, Moon, Plus, Sun, Trash2, WifiOff } from 'lucide-react'
 
 const PENDING_QUEUE_KEY = 'event-app-pending-queue'
 const HEARTBEAT_MS = 60_000
@@ -16,9 +16,17 @@ function saveQueue(queue) {
   localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue))
 }
 
-export default function RegistrationDesk({ deskNumber, sessionToken, onLogout, theme, toggleTheme }) {
+function fieldInputType(type) {
+  if (type === 'number') return 'number'
+  if (type === 'tel') return 'tel'
+  if (type === 'email') return 'email'
+  return 'text'
+}
+
+export default function RegistrationDesk({ deskNumber, sessionToken, operatorName, onLogout, theme, toggleTheme }) {
   const [config, setConfig] = useState(null)
   const [answers, setAnswers] = useState({})
+  const [groupCounts, setGroupCounts] = useState({}) // { [groupKey]: number of instances }
   const [errors, setErrors] = useState({})
   const [dupWarning, setDupWarning] = useState(null)
   const [toast, setToast] = useState(null)
@@ -28,47 +36,45 @@ export default function RegistrationDesk({ deskNumber, sessionToken, onLogout, t
   const [submitting, setSubmitting] = useState(false)
 
   const fieldRefs = useRef({})
-  const firstFieldKeyRef = useRef(null)
 
   const refreshStats = useCallback(async () => {
     const { data } = await supabase.rpc('get_desk_stats', { p_desk_number: deskNumber })
     if (data) setStats(data)
   }, [deskNumber])
 
-  // Load event config once
   useEffect(() => {
     supabase.rpc('get_event_config').then(({ data }) => {
       if (data) {
         setConfig(data)
-        if (data.questions?.length) {
-          firstFieldKeyRef.current = data.questions[0].key
+        const initialCounts = {}
+        for (const q of data.questions || []) {
+          if (q.type === 'group') initialCounts[q.key] = Math.max(1, q.group?.min || 1)
         }
+        setGroupCounts(initialCounts)
       }
     })
     refreshStats()
   }, [refreshStats])
 
-  // Auto-focus first field on mount
   useEffect(() => {
     if (config?.questions?.length) {
-      const firstKey = config.questions[0].key
-      fieldRefs.current[firstKey]?.focus()
+      const first = config.questions[0]
+      if (first.type === 'group') {
+        fieldRefs.current[`${first.key}.0.${first.group.fields[0]?.key}`]?.focus()
+      } else {
+        fieldRefs.current[first.key]?.focus()
+      }
     }
   }, [config])
 
-  // Heartbeat every 60s
   useEffect(() => {
     const interval = setInterval(async () => {
       const { error } = await supabase.rpc('heartbeat_desk', { p_session_token: sessionToken })
-      if (error) {
-        // Desk session expired (no heartbeat for 3+ min, reclaimed) — force re-login
-        onLogout(true)
-      }
+      if (error) onLogout(true)
     }, HEARTBEAT_MS)
     return () => clearInterval(interval)
   }, [sessionToken, onLogout])
 
-  // Online/offline tracking + flush queue when back online
   useEffect(() => {
     function handleOnline() {
       setIsOnline(true)
@@ -79,7 +85,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, onLogout, t
     }
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
-    flushQueue() // try on mount too
+    flushQueue()
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
@@ -96,9 +102,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, onLogout, t
         p_session_token: item.sessionToken,
         p_answers: item.answers,
       })
-      if (error) {
-        remaining.push(item) // keep trying later; duplicates will just fail silently on retry
-      }
+      if (error) remaining.push(item)
     }
     saveQueue(remaining)
     setPendingCount(remaining.length)
@@ -107,13 +111,61 @@ export default function RegistrationDesk({ deskNumber, sessionToken, onLogout, t
 
   function showToast(message, kind = 'success') {
     setToast({ message, kind })
-    setTimeout(() => setToast(null), 2500)
+    setTimeout(() => setToast(null), 2600)
   }
+
+  // Flattened, ordered list of every focusable field (simple + inside groups)
+  // so Enter-to-advance and Enter-to-submit work across the whole form.
+  const flatFields = useMemo(() => {
+    if (!config) return []
+    const list = []
+    for (const q of config.questions) {
+      if (q.type === 'group') {
+        const count = groupCounts[q.key] || 1
+        for (let i = 0; i < count; i++) {
+          for (const f of q.group.fields) {
+            list.push({ focusKey: `${q.key}.${i}.${f.key}`, groupKey: q.key, instanceIndex: i, field: f })
+          }
+        }
+      } else {
+        list.push({ focusKey: q.key, q })
+      }
+    }
+    return list
+  }, [config, groupCounts])
 
   function updateAnswer(key, value) {
     setAnswers((a) => ({ ...a, [key]: value }))
     setErrors((e) => ({ ...e, [key]: undefined }))
     setDupWarning(null)
+  }
+
+  function updateGroupAnswer(groupKey, index, fieldKey, value) {
+    setAnswers((a) => {
+      const arr = Array.isArray(a[groupKey]) ? [...a[groupKey]] : []
+      arr[index] = { ...(arr[index] || {}), [fieldKey]: value }
+      return { ...a, [groupKey]: arr }
+    })
+    setErrors((e) => ({ ...e, [`${groupKey}.${index}.${fieldKey}`]: undefined }))
+  }
+
+  function addGroupInstance(q) {
+    const max = q.group?.max || 10
+    setGroupCounts((c) => ({ ...c, [q.key]: Math.min(max, (c[q.key] || 1) + 1) }))
+  }
+
+  function removeGroupInstance(q, index) {
+    const min = Math.max(1, q.group?.min || 1)
+    setGroupCounts((c) => {
+      const current = c[q.key] || 1
+      if (current <= min) return c
+      return { ...c, [q.key]: current - 1 }
+    })
+    setAnswers((a) => {
+      const arr = Array.isArray(a[q.key]) ? [...a[q.key]] : []
+      arr.splice(index, 1)
+      return { ...a, [q.key]: arr }
+    })
   }
 
   async function handleBlurDuplicateCheck(q) {
@@ -125,15 +177,22 @@ export default function RegistrationDesk({ deskNumber, sessionToken, onLogout, t
       p_value: value,
       p_type: q.type,
     })
-    if (data?.duplicate) {
-      setDupWarning({ label: q.label, deskNumber: data.desk_number })
-    }
+    if (data?.duplicate) setDupWarning({ label: q.label, deskNumber: data.desk_number })
   }
 
   function validate() {
     const newErrors = {}
     for (const q of config.questions) {
-      if (q.required && !(answers[q.key] || '').trim()) {
+      if (q.type === 'group') {
+        const count = groupCounts[q.key] || 1
+        for (let i = 0; i < count; i++) {
+          for (const f of q.group.fields) {
+            if (f.required && !(answers[q.key]?.[i]?.[f.key] || '').toString().trim()) {
+              newErrors[`${q.key}.${i}.${f.key}`] = 'Required'
+            }
+          }
+        }
+      } else if (q.required && !(answers[q.key] || '').trim()) {
         newErrors[q.key] = 'Required'
       }
     }
@@ -145,9 +204,19 @@ export default function RegistrationDesk({ deskNumber, sessionToken, onLogout, t
     setAnswers({})
     setErrors({})
     setDupWarning(null)
+    const initialCounts = {}
+    for (const q of config.questions) {
+      if (q.type === 'group') initialCounts[q.key] = Math.max(1, q.group?.min || 1)
+    }
+    setGroupCounts(initialCounts)
     requestAnimationFrame(() => {
-      const firstKey = firstFieldKeyRef.current
-      if (firstKey) fieldRefs.current[firstKey]?.focus()
+      const first = config.questions[0]
+      if (!first) return
+      if (first.type === 'group') {
+        fieldRefs.current[`${first.key}.0.${first.group.fields[0]?.key}`]?.focus()
+      } else {
+        fieldRefs.current[first.key]?.focus()
+      }
     })
   }
 
@@ -206,15 +275,15 @@ export default function RegistrationDesk({ deskNumber, sessionToken, onLogout, t
     resetForm()
   }
 
-  function handleFieldKeyDown(e, index) {
+  function handleFieldKeyDown(e, flatIndex) {
     if (e.key !== 'Enter') return
     e.preventDefault()
-    const isLast = index === config.questions.length - 1
+    const isLast = flatIndex === flatFields.length - 1
     if (isLast) {
       handleSubmit()
     } else {
-      const nextKey = config.questions[index + 1].key
-      fieldRefs.current[nextKey]?.focus()
+      const next = flatFields[flatIndex + 1]
+      fieldRefs.current[next.focusKey]?.focus()
     }
   }
 
@@ -225,50 +294,50 @@ export default function RegistrationDesk({ deskNumber, sessionToken, onLogout, t
 
   if (!config) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-50 dark:bg-neutral-900 text-neutral-500 dark:text-neutral-400">
-        Loading...
+      <div className="min-h-screen flex items-center justify-center bg-paper dark:bg-ink-950 text-ink-500 dark:text-ink-400 font-display">
+        {'Loading…'}
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 transition-colors flex flex-col">
+    <div className="min-h-screen bg-paper dark:bg-ink-950 transition-colors flex flex-col">
       {/* Top bar */}
-      <header className="bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 px-4 py-2">
+      <header className="bg-white dark:bg-ink-800 border-b border-ink-100 dark:border-ink-700 px-4 py-2.5">
         {config.banner_url && (
-          <img
-            src={config.banner_url}
-            alt="Event banner"
-            className="w-full max-h-24 object-cover rounded-lg mb-2"
-          />
+          <img src={config.banner_url} alt="Event banner" className="w-full max-h-24 object-cover rounded-xl mb-2.5" />
         )}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-neutral-900 dark:text-white">{config.event_name}</h1>
-            <span className="px-2.5 py-1 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-xs font-bold tracking-wide">
+            <h1 className="font-display font-semibold text-lg text-ink-900 dark:text-white">{config.event_name}</h1>
+            <span className="ticket-notch px-3 py-1.5 bg-marigold-500 text-ink-900 text-xs font-display font-bold tracking-wide -rotate-1">
               DESK {deskNumber}
+              {operatorName && (
+                <span className="font-body font-medium ml-1.5 opacity-70">{`· ${operatorName}`}</span>
+              )}
             </span>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <span className="text-neutral-500 dark:text-neutral-400">
-              Desk: <strong className="text-neutral-900 dark:text-white">{stats.desk_count}</strong> | Total:{' '}
-              <strong className="text-neutral-900 dark:text-white">{stats.total_count}</strong>
+            <span className="text-ink-500 dark:text-ink-400">
+              Desk <strong className="text-ink-900 dark:text-white font-display">{stats.desk_count}</strong>
+              {' · Total '}
+              <strong className="text-ink-900 dark:text-white font-display">{stats.total_count}</strong>
             </span>
             {pendingCount > 0 && (
-              <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 text-xs font-medium">
-                <WifiOff size={12} /> Pending Sync ({pendingCount})
+              <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-marigold-500/15 text-marigold-600 dark:text-marigold-400 text-xs font-medium">
+                <WifiOff size={12} /> Pending ({pendingCount})
               </span>
             )}
             <button
               onClick={toggleTheme}
               aria-label="Toggle dark mode"
-              className="p-2 rounded-full text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 dark:text-neutral-400 transition"
+              className="p-2 rounded-full text-ink-500 hover:bg-ink-100 dark:hover:bg-ink-700 dark:text-ink-400 transition"
             >
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-ink-600 dark:text-ink-300 hover:bg-ink-100 dark:hover:bg-ink-700 transition"
             >
               <LogOut size={14} /> Logout
             </button>
@@ -277,74 +346,142 @@ export default function RegistrationDesk({ deskNumber, sessionToken, onLogout, t
       </header>
 
       {!isOnline && (
-        <div className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-sm text-center py-1.5">
-          You're offline — registrations will be saved locally and synced automatically.
+        <div className="bg-marigold-500/15 text-marigold-700 dark:text-marigold-400 text-sm text-center py-1.5">
+          {"You're offline — registrations will be saved locally and synced automatically."}
         </div>
       )}
 
-      {/* Form */}
-      <main className="flex-1 flex items-start justify-center pt-10 px-4">
+      <main className="flex-1 flex items-start justify-center pt-8 px-4 pb-10">
         <form onSubmit={handleSubmit} className="w-full max-w-lg flex flex-col gap-4">
           {dupWarning && (
-            <div className="px-4 py-3 rounded-xl bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 text-sm font-medium">
+            <div className="px-4 py-3 rounded-xl bg-flare-500/10 text-flare-600 dark:text-flare-400 text-sm font-medium animate-rise-in">
               Duplicate detected: {dupWarning.label} already registered at Desk {dupWarning.deskNumber}
             </div>
           )}
 
-          {config.questions.map((q, index) => (
-            <div key={q.key} className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                {q.label}
-                {q.required && <span className="text-red-500 ml-0.5">*</span>}
-              </label>
-
-              {q.type === 'select' ? (
-                <select
-                  ref={(el) => (fieldRefs.current[q.key] = el)}
-                  value={answers[q.key] || ''}
-                  onChange={(e) => updateAnswer(q.key, e.target.value)}
-                  onKeyDown={(e) => handleFieldKeyDown(e, index)}
-                  onBlur={() => handleBlurDuplicateCheck(q)}
-                  className="w-full text-lg px-4 py-3 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-neutral-900 dark:focus:ring-white"
-                >
-                  <option value="">Select...</option>
-                  {(q.options || []).map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
+          {config.questions.map((q) => {
+            if (q.type === 'group') {
+              const count = groupCounts[q.key] || 1
+              const max = q.group?.max || 10
+              const min = Math.max(1, q.group?.min || 1)
+              return (
+                <div key={q.key} className="flex flex-col gap-2.5">
+                  <label className="text-sm font-medium text-ink-700 dark:text-ink-100">
+                    {q.group?.item_label || 'Entry'}
+                    {q.required && <span className="text-flare-500 ml-0.5">*</span>}
+                  </label>
+                  {Array.from({ length: count }).map((_, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-ink-100 dark:border-ink-700 bg-white dark:bg-ink-800 p-3 flex flex-col gap-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-display font-semibold text-ink-400 dark:text-ink-500">
+                          {q.group?.item_label || 'Entry'} {idx + 1}
+                        </span>
+                        {count > min && (
+                          <button
+                            type="button"
+                            onClick={() => removeGroupInstance(q, idx)}
+                            className="text-ink-400 hover:text-flare-500 transition p-1"
+                            aria-label="Remove"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {q.group.fields.map((f) => {
+                          const flatIndex = flatFields.findIndex(
+                            (ff) => ff.focusKey === `${q.key}.${idx}.${f.key}`
+                          )
+                          const errKey = `${q.key}.${idx}.${f.key}`
+                          return (
+                            <div key={f.key} className="flex flex-col gap-1">
+                              <input
+                                ref={(el) => (fieldRefs.current[`${q.key}.${idx}.${f.key}`] = el)}
+                                type={fieldInputType(f.type)}
+                                placeholder={f.label}
+                                value={answers[q.key]?.[idx]?.[f.key] || ''}
+                                onChange={(e) => updateGroupAnswer(q.key, idx, f.key, e.target.value)}
+                                onKeyDown={(e) => handleFieldKeyDown(e, flatIndex)}
+                                className="w-full px-3 py-2.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-paper dark:bg-ink-900 text-ink-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-marigold-500"
+                              />
+                              {errors[errKey] && <p className="text-xs text-flare-500">{errors[errKey]}</p>}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
                   ))}
-                </select>
-              ) : (
-                <input
-                  ref={(el) => (fieldRefs.current[q.key] = el)}
-                  type={q.type === 'number' ? 'number' : q.type === 'tel' ? 'tel' : q.type === 'email' ? 'email' : 'text'}
-                  value={answers[q.key] || ''}
-                  onChange={(e) => updateAnswer(q.key, e.target.value)}
-                  onKeyDown={(e) => handleFieldKeyDown(e, index)}
-                  onBlur={() => handleBlurDuplicateCheck(q)}
-                  className="w-full text-lg px-4 py-3 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-neutral-900 dark:focus:ring-white"
-                />
-              )}
+                  {count < max && (
+                    <button
+                      type="button"
+                      onClick={() => addGroupInstance(q)}
+                      className="flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-ink-200 dark:border-ink-600 text-sm text-ink-500 dark:text-ink-400 hover:border-marigold-500 hover:text-marigold-600 transition"
+                    >
+                      <Plus size={14} /> Add {q.group?.item_label || 'entry'}
+                    </button>
+                  )}
+                </div>
+              )
+            }
 
-              {errors[q.key] && <p className="text-xs text-red-500">{errors[q.key]}</p>}
-            </div>
-          ))}
+            const flatIndex = flatFields.findIndex((ff) => ff.focusKey === q.key)
+            return (
+              <div key={q.key} className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-ink-700 dark:text-ink-100">
+                  {q.label}
+                  {q.required && <span className="text-flare-500 ml-0.5">*</span>}
+                </label>
+
+                {q.type === 'select' ? (
+                  <select
+                    ref={(el) => (fieldRefs.current[q.key] = el)}
+                    value={answers[q.key] || ''}
+                    onChange={(e) => updateAnswer(q.key, e.target.value)}
+                    onKeyDown={(e) => handleFieldKeyDown(e, flatIndex)}
+                    onBlur={() => handleBlurDuplicateCheck(q)}
+                    className="w-full text-lg px-4 py-3 rounded-xl border border-ink-100 dark:border-ink-700 bg-white dark:bg-ink-800 text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-marigold-500"
+                  >
+                    <option value="">{'Select…'}</option>
+                    {(q.options || []).map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    ref={(el) => (fieldRefs.current[q.key] = el)}
+                    type={fieldInputType(q.type)}
+                    value={answers[q.key] || ''}
+                    onChange={(e) => updateAnswer(q.key, e.target.value)}
+                    onKeyDown={(e) => handleFieldKeyDown(e, flatIndex)}
+                    onBlur={() => handleBlurDuplicateCheck(q)}
+                    className="w-full text-lg px-4 py-3 rounded-xl border border-ink-100 dark:border-ink-700 bg-white dark:bg-ink-800 text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-marigold-500"
+                  />
+                )}
+
+                {errors[q.key] && <p className="text-xs text-flare-500">{errors[q.key]}</p>}
+              </div>
+            )
+          })}
 
           <button
             type="submit"
             disabled={submitting}
-            className="mt-2 w-full py-3.5 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-semibold text-lg hover:opacity-90 transition disabled:opacity-50"
+            className="mt-2 w-full py-3.5 rounded-xl bg-ink-900 dark:bg-marigold-500 text-white dark:text-ink-900 font-display font-semibold text-lg hover:opacity-90 active:scale-[0.99] transition disabled:opacity-50"
           >
-            {submitting ? 'Registering...' : 'Register (Enter)'}
+            {submitting ? 'Registering…' : 'Register (press Enter)'}
           </button>
         </form>
       </main>
 
-      {/* Toast */}
       {toast && (
         <div
-          className={`fixed top-4 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl shadow-lg font-medium text-white animate-toast-in ${
-            toast.kind === 'error' ? 'bg-red-600' : 'bg-green-600'
+          className={`fixed top-5 left-1/2 -translate-x-1/2 px-5 py-3 rounded-2xl shadow-xl font-display font-semibold text-white animate-stamp-in -rotate-2 ${
+            toast.kind === 'error' ? 'bg-flare-500' : 'bg-lagoon-500'
           }`}
         >
           {toast.message}
