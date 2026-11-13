@@ -9,33 +9,40 @@ export default {
         body: ['Inter', 'sans-serif'],
       },
       colors: {
-        // Neutral charcoal-navy, corporate rather than playful.
+        // Neutral slate-navy scale, full range so no shade is ever missing
+        // (a missing shade silently renders invisible text).
         ink: {
-          50: '#F3F5F7',
-          100: '#E5E9EE',
-          400: '#8495A8',
-          500: '#5B6B82',
-          700: '#1F2F49',
-          800: '#16243A',
-          900: '#0F1B2D',
+          50: '#F6F8FA',
+          100: '#EBEFF3',
+          200: '#D7DEE6',
+          300: '#B7C2D0',
+          400: '#8D9BAE',
+          500: '#64748B',
+          600: '#47566E',
+          700: '#324256',
+          800: '#1F2C3D',
+          900: '#121B29',
           950: '#0A1420',
         },
-        paper: '#F6F7F9',
-        // Primary accent — deep corporate teal (kept as "marigold" internally
-        // so component class names didn't need to change).
+        paper: '#F3F6F6', // faint pastel-teal tinted white, the light-mode surface
+        // Primary accent — corporate teal (kept as "marigold" internally so
+        // component class names didn't need to change).
         marigold: {
+          50: '#E8F3F0',
           400: '#2E8F7E',
           500: '#146656',
           600: '#0E4F42',
         },
         // Secondary accent — muted steel-blue.
         lagoon: {
+          50: '#EDF1F5',
           400: '#5E7A99',
           500: '#3E5872',
           600: '#2E4259',
         },
         // Error/warning — muted, not alarmist.
         flare: {
+          50: '#FBEBE9',
           400: '#C65B52',
           500: '#A8392F',
           600: '#8A2D25',
