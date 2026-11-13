@@ -5,7 +5,9 @@ const STORAGE_KEY = 'event-app-theme'
 function getInitialTheme() {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored === 'light' || stored === 'dark') return stored
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  // Default to light regardless of system/browser preference — this app's
+  // light theme is the primary, designed-for look.
+  return 'light'
 }
 
 export function useTheme() {
