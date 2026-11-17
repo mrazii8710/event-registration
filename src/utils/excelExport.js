@@ -40,6 +40,11 @@ export function exportRegistrationsToExcel(registrations, questions, eventName) 
       }
     } else {
       header.push(q.label)
+      if (q.type === 'select' && q.other_trigger && q.other_fields?.length) {
+        for (const f of q.other_fields) {
+          header.push(`${q.label} - ${f.label}`)
+        }
+      }
     }
   }
   header.push('Timestamp')
@@ -58,6 +63,12 @@ export function exportRegistrationsToExcel(registrations, questions, eventName) 
         }
       } else {
         row.push(r.answers?.[q.key] ?? '')
+        if (q.type === 'select' && q.other_trigger && q.other_fields?.length) {
+          const otherAnswers = r.answers?.[`${q.key}__other`] || {}
+          for (const f of q.other_fields) {
+            row.push(otherAnswers[f.key] ?? '')
+          }
+        }
       }
     }
     row.push(new Date(r.created_at).toLocaleString())

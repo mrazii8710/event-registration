@@ -179,7 +179,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
         if (newType === 'group') {
           return { key: q.key, label: q.label, type: 'group', required: !!q.required, group: makeGroupDefaults() }
         }
-        const { group, ...rest } = q
+        const { group, other_trigger, other_fields, ...rest } = q
         return { ...rest, type: newType }
       })
     )
@@ -230,12 +230,65 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
     setQuestions((qs) => qs.map((q, i) => (i === qIndex ? { ...q, group: { ...q.group, ...patch } } : q)))
   }
 
+  // "Others" conditional fields: when a select question's chosen value
+  // matches `other_trigger`, the desk form reveals `other_fields` inline
+  // (e.g. Location -> "Others" -> a "Please specify" text box; or
+  // Pickup By -> "Others" -> Name + Number).
+  function toggleOtherFields(qIndex, enabled) {
+    setQuestions((qs) =>
+      qs.map((q, i) => {
+        if (i !== qIndex) return q
+        if (!enabled) {
+          const { other_trigger, other_fields, ...rest } = q
+          return rest
+        }
+        return {
+          ...q,
+          other_trigger: q.other_trigger || (q.options || [])[q.options.length - 1] || 'Others',
+          other_fields: q.other_fields?.length ? q.other_fields : [{ key: `o_${uid()}`, label: 'Please specify', type: 'text', required: true }],
+        }
+      })
+    )
+  }
+  function updateOtherTrigger(qIndex, value) {
+    setQuestions((qs) => qs.map((q, i) => (i === qIndex ? { ...q, other_trigger: value } : q)))
+  }
+  function addOtherField(qIndex) {
+    setQuestions((qs) =>
+      qs.map((q, i) =>
+        i === qIndex ? { ...q, other_fields: [...(q.other_fields || []), { key: `o_${uid()}`, label: '', type: 'text', required: false }] } : q
+      )
+    )
+  }
+  function removeOtherField(qIndex, fIndex) {
+    setQuestions((qs) =>
+      qs.map((q, i) => (i === qIndex ? { ...q, other_fields: q.other_fields.filter((_, fi) => fi !== fIndex) } : q))
+    )
+  }
+  function updateOtherField(qIndex, fIndex, patch) {
+    setQuestions((qs) =>
+      qs.map((q, i) =>
+        i === qIndex ? { ...q, other_fields: q.other_fields.map((f, fi) => (fi === fIndex ? { ...f, ...patch } : f)) } : q
+      )
+    )
+  }
+
   async function handleSaveQuestions() {
     const cleaned = questions.map((q) => {
       if (q.type === 'select') {
         const text = optionsDraft[q.key] ?? (q.options || []).join(', ')
         const options = text.split(',').map((s) => s.trim()).filter(Boolean)
-        return { key: q.key, label: q.label.trim() || 'Untitled Question', type: q.type, required: !!q.required, check_duplicate: !!q.check_duplicate, options }
+        const base = { key: q.key, label: q.label.trim() || 'Untitled Question', type: q.type, required: !!q.required, check_duplicate: !!q.check_duplicate, options }
+        if (q.other_trigger && q.other_fields?.length) {
+          base.other_trigger = q.other_trigger
+          base.other_fields = q.other_fields.map((f) => ({
+            key: f.key,
+            label: f.label.trim() || 'Field',
+            type: f.type,
+            required: !!f.required,
+          }))
+        }
+        return base
       }
       if (q.type === 'group') {
         return {
@@ -320,15 +373,31 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
   ]
 
   return (
-    <div className="min-h-screen bg-paper dark:bg-ink-950 transition-colors flex">
-      <aside className="w-56 shrink-0 bg-ink-900 dark:bg-ink-950 border-r border-ink-800 flex flex-col">
-        <div className="flex items-center gap-2.5 px-5 py-5">
-          <div className="w-9 h-9 rounded-lg bg-marigold-500 flex items-center justify-center">
-            <Ticket className="text-ink-900" size={18} />
+    <div className="min-h-screen bg-paper dark:bg-ink-950 transition-colors flex flex-col md:flex-row">
+      <aside className="md:w-56 md:shrink-0 bg-ink-900 border-b md:border-b-0 md:border-r border-ink-800 flex flex-col">
+        <div className="flex items-center justify-between gap-2.5 px-4 md:px-5 py-3.5 md:py-5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-marigold-500 flex items-center justify-center shrink-0">
+              <Ticket className="text-white" size={16} />
+            </div>
+            <span className="font-display font-semibold text-white">Admin</span>
           </div>
-          <span className="font-display font-semibold text-white">Admin</span>
+          {/* Theme/logout as icon buttons on mobile, where there's no room for a stacked bottom block */}
+          <div className="flex items-center gap-1 md:hidden">
+            <button
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              className="p-2 rounded-lg text-ink-300 hover:bg-ink-800 transition"
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button onClick={onLogout} aria-label="Logout" className="p-2 rounded-lg text-ink-300 hover:bg-ink-800 transition">
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
-        <nav className="flex-1 px-3 flex flex-col gap-1">
+
+        <nav className="flex md:flex-1 md:flex-col gap-1 px-3 pb-3 md:pb-0 overflow-x-auto md:overflow-visible">
           {navItems.map((item) => {
             const Icon = item.icon
             const active = tab === item.id
@@ -336,8 +405,8 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
               <button
                 key={item.id}
                 onClick={() => setTab(item.id)}
-                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
-                  active ? 'bg-marigold-500 text-ink-900' : 'text-ink-300 hover:bg-ink-800'
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 whitespace-nowrap shrink-0 ${
+                  active ? 'bg-marigold-500 text-white' : 'text-ink-300 hover:bg-ink-800'
                 }`}
               >
                 <Icon size={16} /> {item.label}
@@ -345,16 +414,17 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
             )
           })}
         </nav>
-        <div className="p-3 flex flex-col gap-1 border-t border-ink-800">
+
+        <div className="hidden md:flex p-3 flex-col gap-1 border-t border-ink-800">
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-ink-300 hover:bg-ink-800 transition"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-ink-300 hover:bg-ink-800 transition-colors duration-150"
           >
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />} Toggle theme
           </button>
           <button
             onClick={onLogout}
-            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-ink-300 hover:bg-ink-800 transition"
+            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-ink-300 hover:bg-ink-800 transition-colors duration-150"
           >
             <LogOut size={16} /> Logout
           </button>
@@ -363,12 +433,12 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
 
       <div className="flex-1 flex flex-col min-w-0">
         {status && (
-          <div className="bg-marigold-500/10 text-marigold-600 dark:text-marigold-400 text-sm text-center py-2 animate-fade-in">
+          <div className="bg-marigold-500/10 text-marigold-600 dark:text-marigold-400 text-sm text-center py-2 animate-fade-up">
             {status}
           </div>
         )}
 
-        <main className="max-w-2xl mx-auto w-full p-6 flex flex-col gap-6">
+        <main key={tab} className="max-w-2xl mx-auto w-full p-4 md:p-6 flex flex-col gap-5 md:gap-6 animate-fade-up">
           {tab === 'setup' && (
             <>
               <section className="bg-white dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-4 border border-ink-100 dark:border-ink-700">
@@ -399,7 +469,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
 
                 <button
                   onClick={handleSaveEventInfo}
-                  className="py-2.5 rounded-xl bg-ink-900 dark:bg-marigold-500 text-white dark:text-ink-900 font-display font-semibold hover:opacity-90 active:scale-[0.99] transition"
+                  className="py-2.5 rounded-xl bg-marigold-500 dark:bg-marigold-400 text-white dark:text-ink-950 font-display font-semibold hover:opacity-90 active:scale-[0.99] transition"
                 >
                   Save Event Info
                 </button>
@@ -429,7 +499,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                 </div>
                 <button
                   onClick={handleUpdateCodes}
-                  className="py-2.5 rounded-xl bg-ink-900 dark:bg-marigold-500 text-white dark:text-ink-900 font-display font-semibold hover:opacity-90 active:scale-[0.99] transition"
+                  className="py-2.5 rounded-xl bg-marigold-500 dark:bg-marigold-400 text-white dark:text-ink-950 font-display font-semibold hover:opacity-90 active:scale-[0.99] transition"
                 >
                   Update Codes
                 </button>
@@ -443,7 +513,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                 <h2 className="font-display font-semibold text-ink-900 dark:text-white">Registration Questions</h2>
                 <button
                   onClick={addQuestion}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-ink-900 dark:bg-marigold-500 text-white dark:text-ink-900 hover:opacity-90 transition"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-marigold-500 dark:bg-marigold-400 text-white dark:text-ink-950 hover:opacity-90 transition"
                 >
                   <Plus size={14} /> Add
                 </button>
@@ -452,12 +522,12 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
               <div className="flex flex-col gap-3">
                 {questions.map((q, index) => (
                   <div key={q.key} className="border border-ink-100 dark:border-ink-700 rounded-xl p-3 flex flex-col gap-2">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <input
                         value={q.label}
                         onChange={(e) => updateQuestion(index, { label: e.target.value })}
                         placeholder="Question label"
-                        className="flex-1 px-3 py-2 rounded-lg border border-ink-100 dark:border-ink-600 bg-paper dark:bg-ink-900 text-ink-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-marigold-500"
+                        className="flex-1 min-w-[140px] px-3 py-2 rounded-lg border border-ink-100 dark:border-ink-600 bg-paper dark:bg-ink-900 text-ink-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-marigold-500"
                       />
                       <select
                         value={q.type}
@@ -473,13 +543,82 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                     </div>
 
                     {q.type === 'select' && (
-                      <input
-                        value={optionsDraft[q.key] ?? (q.options || []).join(', ')}
-                        onChange={(e) => handleOptionsDraftChange(q.key, e.target.value)}
-                        onBlur={() => commitOptionsDraft(index, q.key)}
-                        placeholder="Comma-separated options e.g. Yes, No"
-                        className="px-3 py-2 rounded-lg border border-ink-100 dark:border-ink-600 bg-paper dark:bg-ink-900 text-ink-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-marigold-500"
-                      />
+                      <>
+                        <input
+                          value={optionsDraft[q.key] ?? (q.options || []).join(', ')}
+                          onChange={(e) => handleOptionsDraftChange(q.key, e.target.value)}
+                          onBlur={() => commitOptionsDraft(index, q.key)}
+                          placeholder="Comma-separated options e.g. Yes, No"
+                          className="px-3 py-2 rounded-lg border border-ink-100 dark:border-ink-600 bg-paper dark:bg-ink-900 text-ink-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-marigold-500"
+                        />
+
+                        <label className="flex items-center gap-1.5 text-sm text-ink-600 dark:text-ink-300">
+                          <input
+                            type="checkbox"
+                            checked={!!q.other_trigger}
+                            onChange={(e) => toggleOtherFields(index, e.target.checked)}
+                          />
+                          Ask extra details when a specific option is chosen
+                        </label>
+
+                        {q.other_trigger && (
+                          <div className="flex flex-col gap-2 bg-paper dark:bg-ink-900 rounded-lg p-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs text-ink-500 dark:text-ink-400 shrink-0">When answer is</span>
+                              <input
+                                value={q.other_trigger}
+                                onChange={(e) => updateOtherTrigger(index, e.target.value)}
+                                placeholder="e.g. Others"
+                                className="flex-1 min-w-[100px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                              />
+                            </div>
+                            <span className="text-xs font-medium text-ink-400 dark:text-ink-500">Ask for</span>
+                            {(q.other_fields || []).map((f, fIndex) => (
+                              <div key={f.key} className="flex flex-wrap gap-2 items-center">
+                                <input
+                                  value={f.label}
+                                  onChange={(e) => updateOtherField(index, fIndex, { label: e.target.value })}
+                                  placeholder="Field label e.g. Name"
+                                  className="flex-1 min-w-[100px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                                />
+                                <select
+                                  value={f.type}
+                                  onChange={(e) => updateOtherField(index, fIndex, { type: e.target.value })}
+                                  className="px-2 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                                >
+                                  {['text', 'number', 'tel', 'email'].map((t) => (
+                                    <option key={t} value={t}>
+                                      {t}
+                                    </option>
+                                  ))}
+                                </select>
+                                <label className="text-xs text-ink-500 dark:text-ink-400 flex items-center gap-1 shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={f.required}
+                                    onChange={(e) => updateOtherField(index, fIndex, { required: e.target.checked })}
+                                  />
+                                  Req
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => removeOtherField(index, fIndex)}
+                                  className="p-1.5 rounded-lg text-flare-500 hover:bg-flare-500/10 shrink-0"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => addOtherField(index)}
+                              className="self-start flex items-center gap-1 text-xs text-ink-500 dark:text-ink-400 hover:text-marigold-600 transition"
+                            >
+                              <Plus size={12} /> Add field
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {q.type === 'group' && (
@@ -515,12 +654,12 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
 
                         <span className="text-xs font-medium text-ink-400 dark:text-ink-500">Fields per entry</span>
                         {q.group.fields.map((f, fIndex) => (
-                          <div key={f.key} className="flex gap-2 items-center">
+                          <div key={f.key} className="flex flex-wrap gap-2 items-center">
                             <input
                               value={f.label}
                               onChange={(e) => updateGroupField(index, fIndex, { label: e.target.value })}
                               placeholder="Field label e.g. Name"
-                              className="flex-1 px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                              className="flex-1 min-w-[100px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
                             />
                             <select
                               value={f.type}
@@ -616,7 +755,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
 
               <button
                 onClick={handleSaveQuestions}
-                className="py-2.5 rounded-xl bg-ink-900 dark:bg-marigold-500 text-white dark:text-ink-900 font-display font-semibold hover:opacity-90 active:scale-[0.99] transition"
+                className="py-2.5 rounded-xl bg-marigold-500 dark:bg-marigold-400 text-white dark:text-ink-950 font-display font-semibold hover:opacity-90 active:scale-[0.99] transition"
               >
                 Save Questions
               </button>
@@ -657,7 +796,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                 <h2 className="font-display font-semibold text-ink-900 dark:text-white">Export</h2>
                 <button
                   onClick={handleExport}
-                  className="py-2.5 rounded-xl bg-ink-900 dark:bg-marigold-500 text-white dark:text-ink-900 font-display font-semibold hover:opacity-90 active:scale-[0.99] transition"
+                  className="py-2.5 rounded-xl bg-marigold-500 dark:bg-marigold-400 text-white dark:text-ink-950 font-display font-semibold hover:opacity-90 active:scale-[0.99] transition"
                 >
                   Download Excel (.xlsx)
                 </button>

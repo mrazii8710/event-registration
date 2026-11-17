@@ -28,17 +28,21 @@ create table if not exists active_desks (
   desk_number int primary key,
   session_token uuid not null unique default gen_random_uuid(),
   last_heartbeat timestamptz not null default now(),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  operator_name text
 );
 
 -- One row per registered attendee. `answers` holds whatever questions
--- were configured at the time of registration (dynamic, JSONB).
+-- were configured at the time of registration (dynamic, JSONB). A "group"
+-- question's answer is a JSON array of objects, one per repeated entry
+-- (e.g. multiple students in one registration).
 create table if not exists registrations (
   id bigserial primary key,
   desk_number int not null,
   session_token uuid,
   answers jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  operator_name text
 );
 
 create index if not exists idx_registrations_created_at on registrations (created_at);
@@ -130,11 +134,11 @@ $$;
 -- On a desk-code match, atomically assigns the lowest free desk number.
 -- ----------------------------------------------------------------------------
 
-create or replace function verify_access_code(p_code text)
+create or replace function verify_access_code(p_code text, p_name text default null)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_admin_hash text;
@@ -168,13 +172,14 @@ begin
 
     v_session_token := gen_random_uuid();
 
-    insert into active_desks (desk_number, session_token, last_heartbeat)
-    values (v_desk_number, v_session_token, now());
+    insert into active_desks (desk_number, session_token, last_heartbeat, operator_name)
+    values (v_desk_number, v_session_token, now(), nullif(trim(p_name), ''));
 
     return jsonb_build_object(
       'role', 'desk',
       'desk_number', v_desk_number,
-      'session_token', v_session_token
+      'session_token', v_session_token,
+      'operator_name', nullif(trim(p_name), '')
     );
   end if;
 
@@ -182,7 +187,7 @@ begin
 end;
 $$;
 
-grant execute on function verify_access_code(text) to anon;
+grant execute on function verify_access_code(text, text) to anon;
 
 -- ----------------------------------------------------------------------------
 -- 6. RPC: resume_desk_session
@@ -194,21 +199,22 @@ create or replace function resume_desk_session(p_session_token uuid)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_desk_number int;
+  v_operator_name text;
 begin
   update active_desks
   set last_heartbeat = now()
   where session_token = p_session_token
-  returning desk_number into v_desk_number;
+  returning desk_number, operator_name into v_desk_number, v_operator_name;
 
   if v_desk_number is null then
     return jsonb_build_object('valid', false);
   end if;
 
-  return jsonb_build_object('valid', true, 'desk_number', v_desk_number);
+  return jsonb_build_object('valid', true, 'desk_number', v_desk_number, 'operator_name', v_operator_name);
 end;
 $$;
 
@@ -222,7 +228,7 @@ create or replace function heartbeat_desk(p_session_token uuid)
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   update active_desks
@@ -245,7 +251,7 @@ create or replace function release_desk(p_session_token uuid)
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   delete from active_desks where session_token = p_session_token;
@@ -263,7 +269,7 @@ create or replace function get_event_config()
 returns jsonb
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select jsonb_build_object(
     'event_name', event_name,
@@ -284,7 +290,7 @@ create or replace function get_desk_stats(p_desk_number int)
 returns jsonb
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select jsonb_build_object(
     'desk_count', (select count(*) from registrations where desk_number = p_desk_number),
@@ -305,7 +311,7 @@ create or replace function check_duplicate_value(p_question_key text, p_value te
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_norm text;
@@ -343,10 +349,11 @@ create or replace function submit_registration(p_session_token uuid, p_answers j
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_desk_number int;
+  v_operator_name text;
   v_reg_id bigint;
   v_questions jsonb;
   v_q jsonb;
@@ -355,16 +362,18 @@ declare
   v_norm text;
   v_conflict_desk int;
 begin
-  select desk_number into v_desk_number from active_desks where session_token = p_session_token;
+  select desk_number, operator_name into v_desk_number, v_operator_name
+  from active_desks where session_token = p_session_token;
   if v_desk_number is null then
     raise exception 'invalid_session';
   end if;
 
   select questions into v_questions from event_config where id = 1;
 
-  -- Pre-check so we can report a friendly "already registered at Desk X" message.
+  -- Duplicate checks only apply to simple top-level fields, never inside a
+  -- repeatable "group" (e.g. multiple students per registration).
   for v_q in select * from jsonb_array_elements(v_questions) loop
-    if coalesce((v_q->>'check_duplicate')::boolean, false) then
+    if coalesce((v_q->>'type') <> 'group', true) and coalesce((v_q->>'check_duplicate')::boolean, false) then
       v_key := v_q->>'key';
       v_raw := p_answers->>v_key;
       if v_raw is not null and length(trim(v_raw)) > 0 then
@@ -380,14 +389,14 @@ begin
     end if;
   end loop;
 
-  insert into registrations (desk_number, session_token, answers)
-  values (v_desk_number, p_session_token, p_answers)
+  insert into registrations (desk_number, session_token, answers, operator_name)
+  values (v_desk_number, p_session_token, p_answers, v_operator_name)
   returning id into v_reg_id;
 
   -- Insert dedup keys. The unique constraint is the real race-proof guard —
   -- the pre-check above just gives a nicer error message in the common case.
   for v_q in select * from jsonb_array_elements(v_questions) loop
-    if coalesce((v_q->>'check_duplicate')::boolean, false) then
+    if coalesce((v_q->>'type') <> 'group', true) and coalesce((v_q->>'check_duplicate')::boolean, false) then
       v_key := v_q->>'key';
       v_raw := p_answers->>v_key;
       if v_raw is not null and length(trim(v_raw)) > 0 then
@@ -419,6 +428,7 @@ grant execute on function submit_registration(uuid, jsonb) to anon;
 create or replace function check_admin(p_admin_code text)
 returns void
 language plpgsql
+set search_path = public, extensions
 as $$
 declare
   v_hash text;
@@ -435,7 +445,7 @@ create or replace function admin_get_dashboard(p_admin_code text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_config record;
@@ -448,6 +458,7 @@ begin
 
   select coalesce(jsonb_agg(jsonb_build_object(
            'desk_number', d.desk_number,
+           'operator_name', d.operator_name,
            'last_heartbeat', d.last_heartbeat,
            'registrations', (select count(*) from registrations r where r.desk_number = d.desk_number)
          ) order by d.desk_number), '[]'::jsonb)
@@ -473,7 +484,7 @@ create or replace function admin_update_event(p_admin_code text, p_event_name te
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform check_admin(p_admin_code);
@@ -492,7 +503,7 @@ create or replace function admin_update_questions(p_admin_code text, p_questions
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform check_admin(p_admin_code);
@@ -510,7 +521,7 @@ create or replace function admin_update_codes(p_admin_code text, p_new_desk_code
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform check_admin(p_admin_code);
@@ -534,7 +545,7 @@ create or replace function admin_force_release_desk(p_admin_code text, p_desk_nu
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   perform check_admin(p_admin_code);
@@ -549,7 +560,7 @@ create or replace function admin_get_registrations(p_admin_code text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_rows jsonb;
@@ -559,6 +570,7 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
            'id', r.id,
            'desk_number', r.desk_number,
+           'operator_name', r.operator_name,
            'answers', r.answers,
            'created_at', r.created_at
          ) order by r.id), '[]'::jsonb)
@@ -577,7 +589,7 @@ create or replace function admin_reset_event(p_admin_code text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_banner text;
@@ -608,7 +620,7 @@ create or replace function keepalive_ping()
 returns void
 language sql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   update event_config set updated_at = now() where id = 1;
 $$;

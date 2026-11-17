@@ -9,49 +9,58 @@ export default {
         body: ['Inter', 'sans-serif'],
       },
       colors: {
-        // Neutral slate-navy scale, full range so no shade is ever missing
-        // (a missing shade silently renders invisible text).
+        // Neutral slate scale. Full range, every shade actually used,
+        // tuned so text/border pairs hit ~4.5:1+ contrast in both themes.
         ink: {
-          50: '#F6F8FA',
-          100: '#EBEFF3',
-          200: '#D7DEE6',
-          300: '#B7C2D0',
-          400: '#8D9BAE',
-          500: '#64748B',
-          600: '#47566E',
-          700: '#324256',
-          800: '#1F2C3D',
-          900: '#121B29',
-          950: '#0A1420',
+          50: '#F7F8FA',
+          100: '#EEF1F4',
+          200: '#DEE3E9',
+          300: '#C3CBD4',
+          400: '#8D98A8',
+          500: '#64708A', // light-mode secondary text on white: ~4.9:1
+          600: '#4A5570',
+          700: '#313B52',
+          800: '#1E2638', // dark-mode card surface
+          900: '#141B2B', // dark-mode secondary surface / light-mode headings
+          950: '#0B1220', // dark-mode page background
         },
-        paper: '#F3F6F6', // faint pastel-teal tinted white, the light-mode surface
-        // Primary accent — corporate teal (kept as "marigold" internally so
-        // component class names didn't need to change).
+        paper: '#F7F8FA', // light-mode page background
+        // Single brand accent — teal, used consistently in both themes
+        // (kept as "marigold" internally so component classNames didn't
+        // need renaming across files).
         marigold: {
-          50: '#E8F3F0',
-          400: '#2E8F7E',
-          500: '#146656',
-          600: '#0E4F42',
+          50: '#E6F3EF',
+          400: '#2EA98C', // dark-mode button fill (bright enough on #0B1220)
+          500: '#0F6A58', // light-mode button fill (white text: ~5.3:1)
+          600: '#0B5245',
         },
-        // Secondary accent — muted steel-blue.
+        // Secondary/info accent — muted steel-blue.
         lagoon: {
-          50: '#EDF1F5',
-          400: '#5E7A99',
-          500: '#3E5872',
-          600: '#2E4259',
+          50: '#EEF2F6',
+          400: '#7089A8',
+          500: '#44597A',
+          600: '#334768',
         },
-        // Error/warning — muted, not alarmist.
+        // Error — muted red, readable on both light and dark surfaces.
         flare: {
-          50: '#FBEBE9',
-          400: '#C65B52',
-          500: '#A8392F',
-          600: '#8A2D25',
+          50: '#FBEAE8',
+          400: '#E07A70',
+          500: '#B3362B',
+          600: '#8E2A21',
         },
       },
       keyframes: {
-        'fade-in': {
-          '0%': { opacity: '0', transform: 'translateY(4px)' },
+        'fade-up': {
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'toast-in': {
+          '0%': { opacity: '0', transform: 'translateY(-10px) translateX(-50%)' },
+          '100%': { opacity: '1', transform: 'translateY(0) translateX(-50%)' },
+        },
+        pulse-once: {
+          '0%, 100%': { transform: 'scale(1)' },
+          '40%': { transform: 'scale(1.18)' },
         },
         shake: {
           '0%, 100%': { transform: 'translateX(0)' },
@@ -60,7 +69,9 @@ export default {
         },
       },
       animation: {
-        'fade-in': 'fade-in 0.2s ease-out forwards',
+        'fade-up': 'fade-up 0.25s ease-out forwards',
+        'toast-in': 'toast-in 0.25s cubic-bezier(.2,.8,.3,1) forwards',
+        'pulse-once': 'pulse-once 0.35s ease-out',
         shake: 'shake 0.25s ease-in-out',
       },
     },

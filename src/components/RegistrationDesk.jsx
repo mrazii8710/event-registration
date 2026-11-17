@@ -31,6 +31,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
   const [dupWarning, setDupWarning] = useState(null)
   const [toast, setToast] = useState(null)
   const [stats, setStats] = useState({ desk_count: 0, total_count: 0 })
+  const [statPulse, setStatPulse] = useState(false)
   const [pendingCount, setPendingCount] = useState(loadQueue().length)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [submitting, setSubmitting] = useState(false)
@@ -129,15 +130,26 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
         }
       } else {
         list.push({ focusKey: q.key, q })
+        if (q.type === 'select' && q.other_trigger && answers[q.key] === q.other_trigger) {
+          for (const f of q.other_fields || []) {
+            list.push({ focusKey: `${q.key}__other.${f.key}`, otherKey: q.key, field: f })
+          }
+        }
       }
     }
     return list
-  }, [config, groupCounts])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, groupCounts, answers])
 
   function updateAnswer(key, value) {
     setAnswers((a) => ({ ...a, [key]: value }))
     setErrors((e) => ({ ...e, [key]: undefined }))
     setDupWarning(null)
+  }
+
+  function updateOtherAnswer(qKey, fieldKey, value) {
+    setAnswers((a) => ({ ...a, [`${qKey}__other`]: { ...(a[`${qKey}__other`] || {}), [fieldKey]: value } }))
+    setErrors((e) => ({ ...e, [`${qKey}__other.${fieldKey}`]: undefined }))
   }
 
   function updateGroupAnswer(groupKey, index, fieldKey, value) {
@@ -194,6 +206,13 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
         }
       } else if (q.required && !(answers[q.key] || '').trim()) {
         newErrors[q.key] = 'Required'
+      }
+      if (q.type === 'select' && q.other_trigger && answers[q.key] === q.other_trigger) {
+        for (const f of q.other_fields || []) {
+          if (f.required && !(answers[`${q.key}__other`]?.[f.key] || '').toString().trim()) {
+            newErrors[`${q.key}__other.${f.key}`] = 'Required'
+          }
+        }
       }
     }
     setErrors(newErrors)
@@ -272,6 +291,8 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
 
     showToast(`Registered! #${data.registration_id}`)
     setStats((s) => ({ desk_count: s.desk_count + 1, total_count: s.total_count + 1 }))
+    setStatPulse(true)
+    setTimeout(() => setStatPulse(false), 350)
     resetForm()
   }
 
@@ -319,9 +340,18 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
           </div>
           <div className="flex items-center gap-3 text-sm">
             <span className="text-ink-500 dark:text-ink-400">
-              Desk <strong className="text-ink-900 dark:text-white font-display">{stats.desk_count}</strong>
+              Desk{' '}
+              <strong
+                className={`inline-block text-ink-900 dark:text-white font-display ${statPulse ? 'animate-pulse-once text-marigold-500 dark:text-marigold-400' : ''}`}
+              >
+                {stats.desk_count}
+              </strong>
               {' · Total '}
-              <strong className="text-ink-900 dark:text-white font-display">{stats.total_count}</strong>
+              <strong
+                className={`inline-block text-ink-900 dark:text-white font-display ${statPulse ? 'animate-pulse-once text-marigold-500 dark:text-marigold-400' : ''}`}
+              >
+                {stats.total_count}
+              </strong>
             </span>
             {pendingCount > 0 && (
               <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-marigold-500/15 text-marigold-600 dark:text-marigold-400 text-xs font-medium">
@@ -354,7 +384,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
       <main className="flex-1 flex items-start justify-center pt-8 px-4 pb-10">
         <form onSubmit={handleSubmit} className="w-full max-w-lg flex flex-col gap-4">
           {dupWarning && (
-            <div className="px-4 py-3 rounded-lg bg-flare-500/10 text-flare-600 dark:text-flare-400 text-sm font-medium animate-fade-in">
+            <div className="px-4 py-3 rounded-lg bg-flare-500/10 text-flare-600 dark:text-flare-400 text-sm font-medium animate-fade-up">
               Duplicate detected: {dupWarning.label} already registered at Desk {dupWarning.deskNumber}
             </div>
           )}
@@ -436,21 +466,58 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
                 </label>
 
                 {q.type === 'select' ? (
-                  <select
-                    ref={(el) => (fieldRefs.current[q.key] = el)}
-                    value={answers[q.key] || ''}
-                    onChange={(e) => updateAnswer(q.key, e.target.value)}
-                    onKeyDown={(e) => handleFieldKeyDown(e, flatIndex)}
-                    onBlur={() => handleBlurDuplicateCheck(q)}
-                    className="w-full text-lg px-4 py-3 rounded-xl border border-ink-100 dark:border-ink-700 bg-white dark:bg-ink-800 text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-marigold-500"
-                  >
-                    <option value="">{'Select…'}</option>
-                    {(q.options || []).map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      ref={(el) => (fieldRefs.current[q.key] = el)}
+                      value={answers[q.key] || ''}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        updateAnswer(q.key, value)
+                        if (q.other_trigger && value !== q.other_trigger) {
+                          setAnswers((a) => {
+                            const { [`${q.key}__other`]: _drop, ...rest } = a
+                            return rest
+                          })
+                        }
+                      }}
+                      onKeyDown={(e) => handleFieldKeyDown(e, flatIndex)}
+                      onBlur={() => handleBlurDuplicateCheck(q)}
+                      className="w-full text-lg px-4 py-3 rounded-xl border border-ink-100 dark:border-ink-700 bg-white dark:bg-ink-800 text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-marigold-500"
+                    >
+                      <option value="">{'Select…'}</option>
+                      {(q.options || []).map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+
+                    {q.other_trigger && answers[q.key] === q.other_trigger && (
+                      <div className="flex flex-col gap-2 rounded-xl border border-ink-100 dark:border-ink-700 bg-ink-50 dark:bg-ink-900 p-3 animate-fade-up">
+                        {(q.other_fields || []).map((f) => {
+                          const focusKey = `${q.key}__other.${f.key}`
+                          const otherFlatIndex = flatFields.findIndex((ff) => ff.focusKey === focusKey)
+                          return (
+                            <div key={f.key} className="flex flex-col gap-1">
+                              <label className="text-xs font-medium text-ink-600 dark:text-ink-300">
+                                {f.label}
+                                {f.required && <span className="text-flare-500 ml-0.5">*</span>}
+                              </label>
+                              <input
+                                ref={(el) => (fieldRefs.current[focusKey] = el)}
+                                type={fieldInputType(f.type)}
+                                value={answers[`${q.key}__other`]?.[f.key] || ''}
+                                onChange={(e) => updateOtherAnswer(q.key, f.key, e.target.value)}
+                                onKeyDown={(e) => handleFieldKeyDown(e, otherFlatIndex)}
+                                className="w-full px-3 py-2 rounded-lg border border-ink-200 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-marigold-500"
+                              />
+                              {errors[focusKey] && <p className="text-xs text-flare-500">{errors[focusKey]}</p>}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <input
                     ref={(el) => (fieldRefs.current[q.key] = el)}
@@ -471,16 +538,16 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
           <button
             type="submit"
             disabled={submitting}
-            className="mt-2 w-full py-3.5 rounded-xl bg-ink-900 dark:bg-marigold-500 text-white dark:text-ink-900 font-display font-semibold text-lg hover:opacity-90 active:scale-[0.99] transition disabled:opacity-50"
+            className="mt-2 w-full py-3.5 rounded-xl bg-marigold-500 dark:bg-marigold-400 text-white dark:text-ink-950 font-display font-semibold text-lg hover:opacity-90 active:scale-[0.99] transition disabled:opacity-50"
           >
-            {submitting ? 'Registering…' : 'Register (press Enter)'}
+            {submitting ? 'Registering…' : 'Register'}
           </button>
         </form>
       </main>
 
       {toast && (
         <div
-          className={`fixed top-5 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg shadow-md font-display font-semibold text-white animate-fade-in ${
+          className={`fixed top-5 left-1/2 px-5 py-3 rounded-lg shadow-md font-display font-semibold text-white animate-toast-in ${
             toast.kind === 'error' ? 'bg-flare-500' : 'bg-marigold-500'
           }`}
         >
