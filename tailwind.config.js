@@ -58,7 +58,7 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(-10px) translateX(-50%)' },
           '100%': { opacity: '1', transform: 'translateY(0) translateX(-50%)' },
         },
-        pulse-once: {
+        'pulse-once': {
           '0%, 100%': { transform: 'scale(1)' },
           '40%': { transform: 'scale(1.18)' },
         },
