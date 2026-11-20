@@ -324,7 +324,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
   return (
     <div className="min-h-screen bg-paper dark:bg-ink-950 transition-colors flex flex-col">
       {/* Top bar */}
-      <header className="bg-white dark:bg-ink-800 border-b border-ink-100 dark:border-ink-700 px-4 py-2.5">
+      <header className="bg-cream dark:bg-ink-800 border-b border-ink-100 dark:border-ink-700 px-4 py-2.5">
         {config.banner_url && (
           <img src={config.banner_url} alt="Event banner" className="w-full max-h-24 object-cover rounded-xl mb-2.5" />
         )}
@@ -403,7 +403,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
                   {Array.from({ length: count }).map((_, idx) => (
                     <div
                       key={idx}
-                      className="rounded-xl border border-ink-100 dark:border-ink-700 bg-white dark:bg-ink-800 p-3 flex flex-col gap-2"
+                      className="rounded-xl border border-ink-100 dark:border-ink-700 bg-cream dark:bg-ink-800 p-3 flex flex-col gap-2"
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-display font-semibold text-ink-400 dark:text-ink-500">
@@ -482,7 +482,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
                       }}
                       onKeyDown={(e) => handleFieldKeyDown(e, flatIndex)}
                       onBlur={() => handleBlurDuplicateCheck(q)}
-                      className="w-full text-lg px-4 py-3 rounded-xl border border-ink-100 dark:border-ink-700 bg-white dark:bg-ink-800 text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-marigold-500"
+                      className="w-full text-lg px-4 py-3 rounded-xl border border-ink-100 dark:border-ink-700 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-marigold-500"
                     >
                       <option value="">{'Select…'}</option>
                       {(q.options || []).map((opt) => (
@@ -509,7 +509,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
                                 value={answers[`${q.key}__other`]?.[f.key] || ''}
                                 onChange={(e) => updateOtherAnswer(q.key, f.key, e.target.value)}
                                 onKeyDown={(e) => handleFieldKeyDown(e, otherFlatIndex)}
-                                className="w-full px-3 py-2 rounded-lg border border-ink-200 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-marigold-500"
+                                className="w-full px-3 py-2 rounded-lg border border-ink-200 dark:border-ink-600 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-marigold-500"
                               />
                               {errors[focusKey] && <p className="text-xs text-flare-500">{errors[focusKey]}</p>}
                             </div>
@@ -526,7 +526,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
                     onChange={(e) => updateAnswer(q.key, e.target.value)}
                     onKeyDown={(e) => handleFieldKeyDown(e, flatIndex)}
                     onBlur={() => handleBlurDuplicateCheck(q)}
-                    className="w-full text-lg px-4 py-3 rounded-xl border border-ink-100 dark:border-ink-700 bg-white dark:bg-ink-800 text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-marigold-500"
+                    className="w-full text-lg px-4 py-3 rounded-xl border border-ink-100 dark:border-ink-700 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-marigold-500"
                   />
                 )}
 

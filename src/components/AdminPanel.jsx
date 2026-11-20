@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import imageCompression from 'browser-image-compression'
 import { supabase, BANNER_BUCKET } from '../lib/supabase'
 import { exportRegistrationsToExcel } from '../utils/excelExport'
+import Analytics from './Analytics'
 import {
   LogOut,
   Moon,
@@ -14,7 +15,8 @@ import {
   Settings2,
   ListChecks,
   Users,
-  Ticket,
+  Leaf,
+  LayoutDashboard,
 } from 'lucide-react'
 
 const QUESTION_TYPES = ['text', 'number', 'tel', 'email', 'select', 'group']
@@ -56,7 +58,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
   const [newAdminCode, setNewAdminCode] = useState('')
   const [status, setStatus] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [tab, setTab] = useState('setup')
+  const [tab, setTab] = useState('dashboard')
   const fileInputRef = useRef(null)
 
   const loadDashboardFull = useCallback(async () => {
@@ -367,6 +369,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
   }
 
   const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'setup', label: 'Event Setup', icon: Settings2 },
     { id: 'questions', label: 'Questions', icon: ListChecks },
     { id: 'desks', label: 'Desks & Data', icon: Users },
@@ -378,7 +381,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
         <div className="flex items-center justify-between gap-2.5 px-4 md:px-5 py-3.5 md:py-5">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-marigold-500 flex items-center justify-center shrink-0">
-              <Ticket className="text-white" size={16} />
+              <Leaf className="text-white" size={16} />
             </div>
             <span className="font-display font-semibold text-white">Admin</span>
           </div>
@@ -439,9 +442,11 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
         )}
 
         <main key={tab} className="max-w-2xl mx-auto w-full p-4 md:p-6 flex flex-col gap-5 md:gap-6 animate-fade-up">
+          {tab === 'dashboard' && <Analytics adminCode={adminCode} />}
+
           {tab === 'setup' && (
             <>
-              <section className="bg-white dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-4 border border-ink-100 dark:border-ink-700">
+              <section className="bg-cream dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-4 border border-ink-100 dark:border-ink-700">
                 <h2 className="font-display font-semibold text-ink-900 dark:text-white">Event Info</h2>
 
                 <div className="flex flex-col gap-1.5">
@@ -475,7 +480,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                 </button>
               </section>
 
-              <section className="bg-white dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-4 border border-ink-100 dark:border-ink-700">
+              <section className="bg-cream dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-4 border border-ink-100 dark:border-ink-700">
                 <h2 className="font-display font-semibold text-ink-900 dark:text-white">Access Codes</h2>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-ink-700 dark:text-ink-100">New Desk Security Code</label>
@@ -508,7 +513,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
           )}
 
           {tab === 'questions' && (
-            <section className="bg-white dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-4 border border-ink-100 dark:border-ink-700">
+            <section className="bg-cream dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-4 border border-ink-100 dark:border-ink-700">
               <div className="flex items-center justify-between">
                 <h2 className="font-display font-semibold text-ink-900 dark:text-white">Registration Questions</h2>
                 <button
@@ -569,7 +574,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                                 value={q.other_trigger}
                                 onChange={(e) => updateOtherTrigger(index, e.target.value)}
                                 placeholder="e.g. Others"
-                                className="flex-1 min-w-[100px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                                className="flex-1 min-w-[100px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
                               />
                             </div>
                             <span className="text-xs font-medium text-ink-400 dark:text-ink-500">Ask for</span>
@@ -579,12 +584,12 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                                   value={f.label}
                                   onChange={(e) => updateOtherField(index, fIndex, { label: e.target.value })}
                                   placeholder="Field label e.g. Name"
-                                  className="flex-1 min-w-[100px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                                  className="flex-1 min-w-[100px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
                                 />
                                 <select
                                   value={f.type}
                                   onChange={(e) => updateOtherField(index, fIndex, { type: e.target.value })}
-                                  className="px-2 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                                  className="px-2 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
                                 >
                                   {['text', 'number', 'tel', 'email'].map((t) => (
                                     <option key={t} value={t}>
@@ -628,7 +633,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                             value={q.group.item_label}
                             onChange={(e) => updateGroupMeta(index, { item_label: e.target.value })}
                             placeholder="Item name e.g. Student"
-                            className="flex-1 min-w-[120px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                            className="flex-1 min-w-[120px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
                           />
                           <label className="text-xs text-ink-500 dark:text-ink-400 flex items-center gap-1">
                             Min
@@ -637,7 +642,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                               min={1}
                               value={q.group.min}
                               onChange={(e) => updateGroupMeta(index, { min: e.target.value })}
-                              className="w-14 px-2 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                              className="w-14 px-2 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
                             />
                           </label>
                           <label className="text-xs text-ink-500 dark:text-ink-400 flex items-center gap-1">
@@ -647,7 +652,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                               min={1}
                               value={q.group.max}
                               onChange={(e) => updateGroupMeta(index, { max: e.target.value })}
-                              className="w-14 px-2 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                              className="w-14 px-2 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
                             />
                           </label>
                         </div>
@@ -659,12 +664,12 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                               value={f.label}
                               onChange={(e) => updateGroupField(index, fIndex, { label: e.target.value })}
                               placeholder="Field label e.g. Name"
-                              className="flex-1 min-w-[100px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                              className="flex-1 min-w-[100px] px-3 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
                             />
                             <select
                               value={f.type}
                               onChange={(e) => updateGroupField(index, fIndex, { type: e.target.value })}
-                              className="px-2 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-white dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
+                              className="px-2 py-1.5 rounded-lg border border-ink-100 dark:border-ink-600 bg-cream dark:bg-ink-800 text-ink-900 dark:text-white text-sm"
                             >
                               {['text', 'number', 'tel', 'email'].map((t) => (
                                 <option key={t} value={t}>
@@ -764,7 +769,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
 
           {tab === 'desks' && (
             <>
-              <section className="bg-white dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-3 border border-ink-100 dark:border-ink-700">
+              <section className="bg-cream dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-3 border border-ink-100 dark:border-ink-700">
                 <h2 className="font-display font-semibold text-ink-900 dark:text-white">Active Desks</h2>
                 {dashboard.active_desks.length === 0 && (
                   <p className="text-sm text-ink-500 dark:text-ink-400">No active desks right now.</p>
@@ -792,7 +797,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                 </p>
               </section>
 
-              <section className="bg-white dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-3 border border-ink-100 dark:border-ink-700">
+              <section className="bg-cream dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-3 border border-ink-100 dark:border-ink-700">
                 <h2 className="font-display font-semibold text-ink-900 dark:text-white">Export</h2>
                 <button
                   onClick={handleExport}
@@ -802,7 +807,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
                 </button>
               </section>
 
-              <section className="bg-white dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-3 border border-flare-500/30">
+              <section className="bg-cream dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-3 border border-flare-500/30">
                 <h2 className="font-display font-semibold text-flare-500">Danger Zone</h2>
                 <p className="text-sm text-ink-500 dark:text-ink-400">
                   Deletes all registrations, releases all desks, and removes the current banner. Export your data first.

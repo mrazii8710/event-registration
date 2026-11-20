@@ -5,48 +5,50 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ['Inter', 'sans-serif'],
+        display: ['"Baloo 2"', 'sans-serif'],
         body: ['Inter', 'sans-serif'],
       },
       colors: {
-        // Neutral slate scale. Full range, every shade actually used,
-        // tuned so text/border pairs hit ~4.5:1+ contrast in both themes.
+        // Woodland/parchment scale — deep forest green through warm tan,
+        // standing in for the old neutral slate (same class names, new
+        // hues, so components didn't need renaming).
         ink: {
-          50: '#F7F8FA',
-          100: '#EEF1F4',
-          200: '#DEE3E9',
-          300: '#C3CBD4',
-          400: '#8D98A8',
-          500: '#64708A', // light-mode secondary text on white: ~4.9:1
-          600: '#4A5570',
-          700: '#313B52',
-          800: '#1E2638', // dark-mode card surface
-          900: '#141B2B', // dark-mode secondary surface / light-mode headings
-          950: '#0B1220', // dark-mode page background
+          50: '#F3EEDC',
+          100: '#E8DFC3',
+          200: '#D6C9A0',
+          300: '#BFAF85',
+          400: '#8C8360',
+          500: '#6B6246', // secondary text on parchment: ~5.2:1
+          600: '#4F4A36',
+          700: '#3A4A3C',
+          800: '#2B4332', // dark-mode card surface / sidebar
+          900: '#223429', // dark-mode secondary surface
+          950: '#182419', // dark-mode page background
         },
-        paper: '#F7F8FA', // light-mode page background
-        // Single brand accent — teal, used consistently in both themes
-        // (kept as "marigold" internally so component classNames didn't
-        // need renaming across files).
+        paper: '#F4ECDA', // light-mode page background — warm parchment
+        cream: '#FBF6EA', // light-mode card surface — lighter parchment
+        // Primary accent — moss/forest green, used consistently in both
+        // themes (kept as "marigold" internally so component classNames
+        // didn't need renaming).
         marigold: {
-          50: '#E6F3EF',
-          400: '#2EA98C', // dark-mode button fill (bright enough on #0B1220)
-          500: '#0F6A58', // light-mode button fill (white text: ~5.3:1)
-          600: '#0B5245',
+          50: '#EAF0E1',
+          400: '#8FB36B', // dark-mode button fill (bright enough on #182419)
+          500: '#4F7A3D', // light-mode button fill (white text: ~4.8:1)
+          600: '#3F6530',
         },
-        // Secondary/info accent — muted steel-blue.
+        // Secondary/info accent — warm gold-tan.
         lagoon: {
-          50: '#EEF2F6',
-          400: '#7089A8',
-          500: '#44597A',
-          600: '#334768',
+          50: '#F7EFDD',
+          400: '#D8B35C',
+          500: '#B8903A',
+          600: '#95732C',
         },
-        // Error — muted red, readable on both light and dark surfaces.
+        // Error — muted berry red, readable on both light and dark surfaces.
         flare: {
-          50: '#FBEAE8',
-          400: '#E07A70',
-          500: '#B3362B',
-          600: '#8E2A21',
+          50: '#F7E6E2',
+          400: '#C97A66',
+          500: '#A6432C',
+          600: '#853423',
         },
       },
       keyframes: {

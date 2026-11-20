@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Moon, Sun, Ticket } from 'lucide-react'
+import { Moon, Sun, Leaf } from 'lucide-react'
 
 export default function LoginGate({ onDeskLogin, onAdminLogin, theme, toggleTheme }) {
   const [name, setName] = useState('')
@@ -53,13 +53,13 @@ export default function LoginGate({ onDeskLogin, onAdminLogin, theme, toggleThem
 
       <form
         onSubmit={handleSubmit}
-        className={`relative w-full max-w-sm bg-white dark:bg-ink-800 rounded-2xl border border-ink-100 dark:border-ink-700 shadow-sm p-8 flex flex-col gap-5 animate-fade-up ${
+        className={`relative w-full max-w-sm bg-cream dark:bg-ink-800 rounded-2xl border border-ink-100 dark:border-ink-700 shadow-sm p-8 flex flex-col gap-5 animate-fade-up ${
           shake ? 'animate-shake' : ''
         }`}
       >
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-marigold-500 dark:bg-marigold-400 flex items-center justify-center shrink-0">
-            <Ticket className="text-white dark:text-ink-950" size={20} />
+            <Leaf className="text-white dark:text-ink-950" size={20} />
           </div>
           <div>
             <h1 className="font-display font-semibold text-lg text-ink-900 dark:text-white leading-tight">
