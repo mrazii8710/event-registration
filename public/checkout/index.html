@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#F4ECDA">
+<title>Student check-out</title>
+<style>
+  :root {
+    --paper: #F4ECDA; --cream: #FBF6EA; --line: #E8DFC3; --line2: #D6C9A0;
+    --ink: #223429; --ink2: #4F4A36; --muted: #6B6246; --faint: #8C8360;
+    --green: #4F7A3D; --green-d: #3F6530; --green-bg: #EAF0E1;
+    --amber: #95732C; --amber-bg: #F7EFDD;
+    --red: #A6432C; --red-bg: #F7E6E2;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink); }
+  body { font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif; -webkit-text-size-adjust: 100%; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .hidden { display: none !important; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 16px; }
+  h1, h2, .title { font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+
+  /* login / setup */
+  .center { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .panel { width: 100%; max-width: 380px; background: var(--cream); border: 1px solid var(--line); border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+  label.field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: var(--ink2); }
+  input[type=text], input[type=tel], input[type=password], input[type=search], textarea, select {
+    width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line2); background: #fff; font-weight: 400; font-size: 16px; color: var(--ink);
+  }
+  input:focus, textarea:focus, select:focus, button:focus-visible { outline: 3px solid rgba(79,122,61,.35); outline-offset: 1px; border-color: var(--green); }
+  .btn { border: 0; border-radius: 12px; padding: 13px 16px; font-weight: 700; cursor: pointer; transition: transform .05s, opacity .15s; }
+  .btn:active { transform: scale(.99); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn-primary { background: var(--green); color: #fff; }
+  .btn-primary:hover { background: var(--green-d); }
+  .btn-ghost { background: transparent; border: 1px solid var(--line2); color: var(--ink2); }
+  .btn-danger { background: var(--red-bg); color: var(--red); }
+  .btn-link { background: none; border: 0; color: var(--green); font-weight: 600; padding: 6px 8px; cursor: pointer; border-radius: 8px; }
+  .error { background: var(--red-bg); color: var(--red); padding: 10px 12px; border-radius: 10px; font-size: 14px; }
+
+  /* header */
+  header { position: sticky; top: 0; z-index: 5; background: rgba(244,236,218,.94); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+  header .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-top: 12px; padding-bottom: 12px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; background: var(--green); color: #fff; border-radius: 8px; padding: 3px 9px; font-size: 12px; font-weight: 700; }
+  .badge span { opacity: .8; font-weight: 500; }
+  .stats { display: flex; gap: 14px; font-size: 14px; color: var(--muted); margin-left: auto; }
+  .stats b { color: var(--ink); font-size: 16px; }
+
+  /* search */
+  .search { position: relative; margin-top: 18px; }
+  .search input { padding: 15px 44px 15px 44px; font-size: 18px; border-radius: 14px; background: var(--cream); }
+  .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--faint); pointer-events: none; }
+  .search .clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; padding: 10px; color: var(--faint); cursor: pointer; border-radius: 10px; font-size: 18px; line-height: 1; }
+  input[type=search]::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+  .hint { font-size: 13px; color: var(--muted); min-height: 20px; margin: 6px 2px 10px; }
+
+  /* cards */
+  .card { background: var(--cream); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .card.left { background: transparent; }
+  .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .name { font-size: 19px; font-weight: 700; line-height: 1.2; word-break: break-word; }
+  .sub { font-size: 14px; color: var(--muted); margin-top: 2px; }
+  .chip { flex-shrink: 0; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+  .chip.here { background: var(--green-bg); color: var(--green-d); }
+  .chip.notyet { background: var(--amber-bg); color: var(--amber); }
+  .chip.gone { background: var(--line); color: var(--ink2); }
+  .phones { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; color: var(--ink2); }
+  .leftinfo { font-size: 14px; color: var(--ink2); background: var(--paper); border-radius: 10px; padding: 8px 10px; }
+  .actions { display: flex; gap: 8px; align-items: center; }
+  .actions .btn-primary { flex: 1; font-size: 17px; }
+  details.more summary { cursor: pointer; color: var(--muted); font-size: 14px; list-style: none; padding: 4px 0; }
+  details.more summary::-webkit-details-marker { display: none; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 6px 0 0; font-size: 14px; }
+  dt { color: var(--muted); } dd { margin: 0; word-break: break-word; }
+
+  /* check-out form */
+  .co { border-top: 1px dashed var(--line2); padding-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .seg button { padding: 12px; border-radius: 12px; border: 2px solid var(--line2); background: #fff; font-weight: 700; cursor: pointer; }
+  .seg button[aria-pressed=true] { border-color: var(--green); background: var(--green-bg); color: var(--green-d); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 420px) { .two { grid-template-columns: 1fr; } }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { border: 1px solid var(--line2); background: #fff; border-radius: 999px; padding: 6px 12px; font-size: 14px; cursor: pointer; }
+  .chips button[aria-pressed=true] { background: var(--green); border-color: var(--green); color: #fff; }
+  .warn { background: var(--amber-bg); color: var(--amber); border-radius: 10px; padding: 8px 10px; font-size: 14px; }
+
+  .empty { text-align: center; border: 1px dashed var(--line2); border-radius: var(--radius); padding: 18px; color: var(--muted); }
+  .section-title { font-size: 13px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; margin: 22px 2px 8px; }
+  .recent { background: var(--cream); border: 1px solid var(--line); border-radius: var(--radius); }
+  .recent .item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--line); font-size: 14px; }
+  .recent .item:first-child { border-top: 0; }
+  .recent .who { min-width: 0; }
+  .recent .who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+  .admin { margin-top: 26px; display: flex; flex-direction: column; gap: 8px; }
+
+  .toast { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 14px; max-width: 92vw; padding: 12px 16px; border-radius: 12px; color: #fff; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+  .toast.ok { background: var(--green); } .toast.bad { background: var(--red); }
+  .toast button { border: 0; background: rgba(255,255,255,.22); color: #fff; border-radius: 8px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
+  .offline { background: var(--amber-bg); color: var(--amber); text-align: center; font-size: 14px; padding: 8px; }
+</style>
+</head>
+<body>
+
+<div id="offline" class="offline hidden">You're offline. Searching and saving need internet.</div>
+
+<!-- First-time setup (only if config.js wasn't filled in) -->
+<div id="setup" class="center hidden">
+  <form class="panel" id="setupForm" autocomplete="off">
+    <h1 class="title">Connect to your database</h1>
+    <p class="muted small" style="margin:0">Use the same two values as your registration site (Netlify → your site → Site configuration → Environment variables). Saved on this device only. Easier: fill them into <b>config.js</b> before uploading, then nobody sees this screen.</p>
+    <label class="field">Supabase URL<input id="setupUrl" type="text" placeholder="https://xxxx.supabase.co" required></label>
+    <label class="field">Anon / publishable key<input id="setupKey" type="text" placeholder="eyJ… or sb_publishable_…" required></label>
+    <div id="setupErr" class="error hidden"></div>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </form>
+</div>
+
+<!-- Login -->
+<div id="login" class="center hidden">
+  <form class="panel" id="loginForm" autocomplete="off">
+    <div>
+      <h1 class="title">Student check-out</h1>
+      <p class="muted small" style="margin:4px 0 0">Record who leaves and who picks them up. Uses your desk access code.</p>
+    </div>
+    <label class="field">Your name<input id="loginName" type="text" placeholder="So we know who recorded it" required maxlength="60"></label>
+    <label class="field">Access code<input id="loginCode" type="password" inputmode="numeric" placeholder="••••" required></label>
+    <div id="loginErr" class="error hidden"></div>
+    <button class="btn btn-primary" id="loginBtn" type="submit">Continue</button>
+  </form>
+</div>
+
+<!-- Main -->
+<div id="app" class="hidden">
+  <header>
+    <div class="wrap">
+      <h2 class="title" id="eventName" style="font-size:18px">Check-out</h2>
+      <span class="badge">CHECK-OUT <span id="who"></span></span>
+      <div class="stats">
+        <span>Here now <b id="stHere">–</b></span>
+        <span>Left <b id="stLeft">–</b></span>
+      </div>
+      <button class="btn-link" id="logoutBtn" type="button">Log out</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="search">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" autocomplete="off" enterkeyhint="search" aria-label="Mobile number or name" placeholder="Mobile number or student / parent name">
+      <button class="clear hidden" id="clearBtn" type="button" aria-label="Clear">✕</button>
+    </div>
+    <div class="hint" id="hint">Searches everyone registered or checked in. Any number format works.</div>
+    <div id="results"></div>
+
+    <div id="recentWrap" class="hidden">
+      <div class="section-title">Latest check-outs</div>
+      <div class="recent" id="recent"></div>
+    </div>
+
+    <div id="adminBox" class="admin hidden">
+      <div class="section-title" style="margin-bottom:0">Admin</div>
+      <button class="btn btn-ghost" id="reportBtn" type="button">Download check-out report (Excel)</button>
+      <p class="muted small" style="margin:0">Everyone who arrived: who left, when, with whom, and who is still here.</p>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast hidden" role="status"><span id="toastMsg"></span><button id="toastBtn" type="button" class="hidden">Undo</button></div>
+
+<script src="/checkout/config.js"></script>
+<script src="/checkout/xlsx.mini.min.js"></script>
+<script src="/checkout/app.js"></script>
+</body>
+</html>
