@@ -3,6 +3,7 @@ import imageCompression from 'browser-image-compression'
 import { supabase, BANNER_BUCKET } from '../lib/supabase'
 import { exportRegistrationsToExcel } from '../utils/excelExport'
 import Analytics from './Analytics'
+import PreregPanel from './PreregPanel'
 import {
   LogOut,
   Moon,
@@ -17,6 +18,7 @@ import {
   Users,
   Leaf,
   LayoutDashboard,
+  UserCheck,
 } from 'lucide-react'
 
 const QUESTION_TYPES = ['text', 'number', 'tel', 'email', 'select', 'group']
@@ -91,9 +93,11 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
     return () => clearInterval(interval)
   }, [loadDashboardFull, refreshLiveStats])
 
+  const flashTimer = useRef(null)
   function flash(msg) {
     setStatus(msg)
-    setTimeout(() => setStatus(''), 3000)
+    clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => setStatus(''), msg.length > 60 ? 6000 : 3000)
   }
 
   async function handleSaveEventInfo() {
@@ -346,7 +350,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
   }
 
   async function handleResetEvent() {
-    if (!confirm('This will permanently delete ALL registrations, release all desks, and remove the current banner. Continue?')) {
+    if (!confirm('This will permanently delete ALL registrations, clear all check-in marks, release all desks, and remove the current banner. The pre-registered list itself is kept. Continue?')) {
       return
     }
     const { data, error } = await supabase.rpc('admin_reset_event', { p_admin_code: adminCode })
@@ -371,6 +375,7 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'setup', label: 'Event Setup', icon: Settings2 },
+    { id: 'prereg', label: 'Pre-registered', icon: UserCheck },
     { id: 'questions', label: 'Questions', icon: ListChecks },
     { id: 'desks', label: 'Desks & Data', icon: Users },
   ]
@@ -443,6 +448,8 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
 
         <main key={tab} className="max-w-2xl mx-auto w-full p-4 md:p-6 flex flex-col gap-5 md:gap-6 animate-fade-up">
           {tab === 'dashboard' && <Analytics adminCode={adminCode} />}
+
+          {tab === 'prereg' && <PreregPanel adminCode={adminCode} eventName={dashboard.event_name} flash={flash} />}
 
           {tab === 'setup' && (
             <>
@@ -810,7 +817,8 @@ export default function AdminPanel({ adminCode, onLogout, theme, toggleTheme }) 
               <section className="bg-cream dark:bg-ink-800 rounded-2xl p-5 flex flex-col gap-3 border border-flare-500/30">
                 <h2 className="font-display font-semibold text-flare-500">Danger Zone</h2>
                 <p className="text-sm text-ink-500 dark:text-ink-400">
-                  Deletes all registrations, releases all desks, and removes the current banner. Export your data first.
+                  Deletes all registrations and check-in marks, releases all desks, and removes the current banner. The uploaded
+                  pre-registered list is kept. Export your data first.
                 </p>
                 <button
                   onClick={handleResetEvent}

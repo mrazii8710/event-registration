@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { LogOut, Moon, Plus, Sun, Trash2, WifiOff } from 'lucide-react'
+import { ArrowLeft, LogOut, Moon, Plus, Sun, Trash2, WifiOff } from 'lucide-react'
+import CheckInLookup from './CheckInLookup'
 
 const PENDING_QUEUE_KEY = 'event-app-pending-queue'
 const HEARTBEAT_MS = 60_000
@@ -14,6 +15,19 @@ function loadQueue() {
 }
 function saveQueue(queue) {
   localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue))
+}
+function enqueue(item) {
+  const queue = loadQueue()
+  queue.push({ id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, ...item })
+  saveQueue(queue)
+  return queue.length
+}
+function isNetworkError(error) {
+  const msg = (error?.message || '').toLowerCase()
+  return !navigator.onLine || msg.includes('fetch') || msg.includes('network') || msg.includes('timeout')
+}
+function hasPrereg(cfg) {
+  return (cfg?.prereg?.total || 0) > 0
 }
 
 function fieldInputType(type) {
@@ -35,8 +49,13 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
   const [pendingCount, setPendingCount] = useState(loadQueue().length)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [submitting, setSubmitting] = useState(false)
+  const [mode, setMode] = useState('lookup') // 'lookup' (search the pre-registered list) | 'form'
 
   const fieldRefs = useRef({})
+  const flushing = useRef(false)
+  const toastTimer = useRef(null)
+  const answersRef = useRef(answers)
+  answersRef.current = answers
 
   const refreshStats = useCallback(async () => {
     const { data } = await supabase.rpc('get_desk_stats', { p_desk_number: deskNumber })
@@ -47,6 +66,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
     supabase.rpc('get_event_config').then(({ data }) => {
       if (data) {
         setConfig(data)
+        setMode(hasPrereg(data) ? 'lookup' : 'form')
         const initialCounts = {}
         for (const q of data.questions || []) {
           if (q.type === 'group') initialCounts[q.key] = Math.max(1, q.group?.min || 1)
@@ -58,7 +78,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
   }, [refreshStats])
 
   useEffect(() => {
-    if (config?.questions?.length) {
+    if (mode === 'form' && config?.questions?.length) {
       const first = config.questions[0]
       if (first.type === 'group') {
         fieldRefs.current[`${first.key}.0.${first.group.fields[0]?.key}`]?.focus()
@@ -66,15 +86,37 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
         fieldRefs.current[first.key]?.focus()
       }
     }
-  }, [config])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config?.questions, mode])
 
   useEffect(() => {
     const interval = setInterval(async () => {
       const { error } = await supabase.rpc('heartbeat_desk', { p_session_token: sessionToken })
-      if (error) onLogout(true)
+      // A wifi blip must not kick the desk out; only an expired desk does.
+      if (error && (error.message || '').includes('desk_expired')) {
+        onLogout(true)
+        return
+      }
+      if (error) return
+      // Pick up a list the admin uploaded (or removed) after this desk logged in.
+      const { data } = await supabase.rpc('get_event_config')
+      if (data?.prereg) {
+        setConfig((c) => {
+          if (!c) return c
+          const had = hasPrereg(c)
+          const now = hasPrereg(data)
+          if (had !== now) {
+            const formEmpty = Object.keys(answersRef.current).length === 0
+            if (now && formEmpty) setMode('lookup')
+            if (!now) setMode('form')
+          }
+          return { ...c, prereg: data.prereg }
+        })
+        refreshStats()
+      }
     }, HEARTBEAT_MS)
     return () => clearInterval(interval)
-  }, [sessionToken, onLogout])
+  }, [sessionToken, onLogout, refreshStats])
 
   useEffect(() => {
     function handleOnline() {
@@ -95,24 +137,85 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
   }, [])
 
   async function flushQueue() {
-    let queue = loadQueue()
-    if (queue.length === 0) return
-    const remaining = []
-    for (const item of queue) {
-      const { error } = await supabase.rpc('submit_registration', {
-        p_session_token: item.sessionToken,
-        p_answers: item.answers,
-      })
-      if (error) remaining.push(item)
+    if (flushing.current) return // online event + mount can both fire
+    flushing.current = true
+    try {
+      const snapshot = loadQueue()
+      if (snapshot.length === 0) return
+      const done = new Set()
+      let duplicates = 0
+      for (const item of snapshot) {
+        // Re-send under this desk's current session (the old token may be gone after a re-login).
+        const { error } = await supabase.rpc('submit_registration', {
+          p_session_token: sessionToken,
+          p_answers: item.answers,
+        })
+        if (!error) {
+          done.add(item.id)
+        } else if ((error.message || '').includes('DUPLICATE')) {
+          done.add(item.id)
+          duplicates++
+        } else if (isNetworkError(error)) {
+          break // still offline; keep the rest for next time
+        }
+      }
+      // Re-read: items queued while this was running must not be lost.
+      const remaining = loadQueue().filter((i) => !done.has(i.id))
+      saveQueue(remaining)
+      setPendingCount(remaining.length)
+      if (done.size) refreshStats()
+      if (duplicates) showToast(`${duplicates} offline entr${duplicates === 1 ? 'y was' : 'ies were'} already registered, skipped`, 'error')
+    } finally {
+      flushing.current = false
     }
-    saveQueue(remaining)
-    setPendingCount(remaining.length)
-    if (remaining.length < queue.length) refreshStats()
   }
 
-  function showToast(message, kind = 'success') {
-    setToast({ message, kind })
-    setTimeout(() => setToast(null), 2600)
+  function showToast(message, kind = 'success', action = null) {
+    clearTimeout(toastTimer.current)
+    setToast({ message, kind, action })
+    toastTimer.current = setTimeout(() => setToast(null), action ? 6000 : 2600)
+  }
+
+  function handleMarked({ id, name }) {
+    showToast(`${name} checked in`, 'success', {
+      label: 'Undo',
+      onClick: async () => {
+        setToast(null)
+        const { data, error } = await supabase.rpc('desk_undo_attendance', { p_session_token: sessionToken, p_prereg_id: id })
+        if (error || !data?.undone) return showToast('Could not undo', 'error')
+        showToast(`Check-in for ${name} undone`)
+        refreshStats()
+      },
+    })
+    setStatPulse(true)
+    setTimeout(() => setStatPulse(false), 350)
+    refreshStats()
+  }
+
+  // "Register as new" from the search screen: carry over what was typed.
+  function handleRegisterNew(typed) {
+    const prefill = {}
+    if (typed) {
+      const isPhone = /^[0-9\s\-+().]+$/.test(typed)
+      const top = config.questions.filter((q) => q.type !== 'group')
+      const target = isPhone
+        ? top.find((q) => q.type === 'tel' && /mobile|phone|whats/i.test(q.label)) || top.find((q) => q.type === 'tel')
+        : top.find((q) => q.type === 'text' && /name/i.test(q.label))
+      if (target) {
+        prefill[target.key] = typed
+      } else {
+        const group = config.questions.find((q) => q.type === 'group')
+        const field = group?.group?.fields?.find((f) => (isPhone ? f.type === 'tel' : /name/i.test(f.label)))
+        if (field) prefill[group.key] = [{ [field.key]: typed }]
+      }
+    }
+    resetForm(prefill)
+    setMode('form')
+  }
+
+  function backToLookup() {
+    resetForm()
+    setMode('lookup')
   }
 
   // Flattened, ordered list of every focusable field (simple + inside groups)
@@ -219,8 +322,8 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
     return Object.keys(newErrors).length === 0
   }
 
-  function resetForm() {
-    setAnswers({})
+  function resetForm(prefill = {}) {
+    setAnswers(prefill)
     setErrors({})
     setDupWarning(null)
     const initialCounts = {}
@@ -228,6 +331,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
       if (q.type === 'group') initialCounts[q.key] = Math.max(1, q.group?.min || 1)
     }
     setGroupCounts(initialCounts)
+    if (hasPrereg(config)) return // the search screen takes focus itself
     requestAnimationFrame(() => {
       const first = config.questions[0]
       if (!first) return
@@ -248,13 +352,11 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
     setDupWarning(null)
 
     if (!navigator.onLine) {
-      const queue = loadQueue()
-      queue.push({ sessionToken, answers })
-      saveQueue(queue)
-      setPendingCount(queue.length)
+      setPendingCount(enqueue({ sessionToken, answers }))
       showToast('Offline — saved, will sync automatically')
       setSubmitting(false)
       resetForm()
+      if (hasPrereg(config)) setMode('lookup')
       return
     }
 
@@ -276,13 +378,11 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
         onLogout(true)
         return
       }
-      if (msg.toLowerCase().includes('fetch') || msg.toLowerCase().includes('network')) {
-        const queue = loadQueue()
-        queue.push({ sessionToken, answers })
-        saveQueue(queue)
-        setPendingCount(queue.length)
+      if (isNetworkError(error)) {
+        setPendingCount(enqueue({ sessionToken, answers }))
         showToast('Network issue — saved, will sync automatically')
         resetForm()
+        if (hasPrereg(config)) setMode('lookup')
         return
       }
       showToast('Something went wrong — please try again', 'error')
@@ -294,6 +394,7 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
     setStatPulse(true)
     setTimeout(() => setStatPulse(false), 350)
     resetForm()
+    if (hasPrereg(config)) setMode('lookup')
   }
 
   function handleFieldKeyDown(e, flatIndex) {
@@ -338,9 +439,20 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
               )}
             </span>
           </div>
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-ink-500 dark:text-ink-400">
-              Desk{' '}
+          <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm">
+            {hasPrereg(config) && (
+              <span className="text-ink-500 dark:text-ink-400 whitespace-nowrap">
+                {'Checked in '}
+                <strong
+                  className={`inline-block text-ink-900 dark:text-white font-display ${statPulse ? 'animate-pulse-once text-marigold-500 dark:text-marigold-400' : ''}`}
+                >
+                  {stats.checkin_total ?? 0}
+                </strong>
+                {`/${stats.prereg_total ?? config.prereg.total}`}
+              </span>
+            )}
+            <span className="text-ink-500 dark:text-ink-400 whitespace-nowrap">
+              {hasPrereg(config) ? 'New: desk ' : 'Desk '}
               <strong
                 className={`inline-block text-ink-900 dark:text-white font-display ${statPulse ? 'animate-pulse-once text-marigold-500 dark:text-marigold-400' : ''}`}
               >
@@ -382,7 +494,32 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
       )}
 
       <main className="flex-1 flex items-start justify-center pt-8 px-4 pb-10">
+        {mode === 'lookup' && hasPrereg(config) ? (
+          <CheckInLookup
+            sessionToken={sessionToken}
+            prereg={config.prereg}
+            isOnline={isOnline}
+            onMarked={handleMarked}
+            onRegisterNew={handleRegisterNew}
+            onSessionExpired={() => onLogout(true)}
+            showToast={showToast}
+          />
+        ) : (
         <form onSubmit={handleSubmit} className="w-full max-w-lg flex flex-col gap-4">
+          {hasPrereg(config) && (
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={backToLookup}
+                className="flex items-center gap-1.5 px-3 py-2 -ml-3 rounded-lg text-sm text-ink-600 dark:text-ink-300 hover:bg-ink-100 dark:hover:bg-ink-800 transition"
+              >
+                <ArrowLeft size={16} /> Back to search
+              </button>
+              <span className="text-xs font-medium rounded-full px-2.5 py-1 bg-lagoon-50 dark:bg-ink-800 text-lagoon-600 dark:text-lagoon-400">
+                New registration
+              </span>
+            </div>
+          )}
           {dupWarning && (
             <div className="px-4 py-3 rounded-lg bg-flare-500/10 text-flare-600 dark:text-flare-400 text-sm font-medium animate-fade-up">
               Duplicate detected: {dupWarning.label} already registered at Desk {dupWarning.deskNumber}
@@ -543,15 +680,26 @@ export default function RegistrationDesk({ deskNumber, sessionToken, operatorNam
             {submitting ? 'Registering…' : 'Register'}
           </button>
         </form>
+        )}
       </main>
 
       {toast && (
         <div
-          className={`fixed top-5 left-1/2 px-5 py-3 rounded-lg shadow-md font-display font-semibold text-white animate-toast-in ${
+          role="status"
+          className={`fixed top-5 left-1/2 max-w-[92vw] flex items-center gap-4 px-5 py-3 rounded-lg shadow-md font-display font-semibold text-white animate-toast-in ${
             toast.kind === 'error' ? 'bg-flare-500' : 'bg-marigold-500'
           }`}
         >
-          {toast.message}
+          <span>{toast.message}</span>
+          {toast.action && (
+            <button
+              type="button"
+              onClick={toast.action.onClick}
+              className="shrink-0 px-3 py-1 rounded-md bg-white/20 hover:bg-white/30 text-sm transition"
+            >
+              {toast.action.label}
+            </button>
+          )}
         </div>
       )}
     </div>
